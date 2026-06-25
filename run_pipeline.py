@@ -5,9 +5,10 @@ The agent inspects the data, presents a detailed analysis plan, waits for your
 approval, then runs all pipeline steps and generates a Markdown + HTML report.
 
 Examples:
-    python run_pipeline.py --api-key sk-ant-... --data data/demo/pbmc3k.h5ad --run-id demo
-    python run_pipeline.py --provider gemini --api-key AIza... --data /path/to/wes_fastqs --run-id wes1
-    python run_pipeline.py --data data/demo/pbmc3k.h5ad  # uses ANTHROPIC_API_KEY env var
+    python run_pipeline.py                                      # Kang 2018 multimodal demo (default)
+    python run_pipeline.py --data data/demo_multimodal         # same, explicit
+    python run_pipeline.py --data data/demo/pbmc3k.h5ad --run-id pbmc-demo
+    python run_pipeline.py --provider gemini --data /path/to/wes_fastqs --run-id wes1
 """
 
 from __future__ import annotations
@@ -64,8 +65,8 @@ def main() -> None:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--data", required=True,
-                        help="Path to the input data file or directory.")
+    parser.add_argument("--data", default="data/demo_multimodal",
+                        help="Path to the input data file or directory (default: data/demo_multimodal).")
     parser.add_argument("--run-id", default="cli-run",
                         help="Run identifier. Results go to result/<run-id>/.")
     parser.add_argument("--goal", default=DEFAULT_GOAL,

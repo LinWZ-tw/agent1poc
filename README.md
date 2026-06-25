@@ -490,7 +490,7 @@ python run_pipeline.py \
   --data data/demo_multimodal \
   --run-id kang-demo
 
-# Multimodal tumor/normal OC (real scRNA + real WES FASTQ, mock mode)
+# Multimodal tumor/normal OC (local-only — requires the StrasbourgOC cohort data)
 python run_pipeline.py \
   --data data/demo_multimodal_OC \
   --run-id OC-demo \
