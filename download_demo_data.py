@@ -166,7 +166,7 @@ def _download_multimodal() -> None:
                     "Mock WES stub — pipeline runs GATK HaplotypeCaller in "
                     "mock mode (no real FASTQ required for demo)."
                 ),
-            }, indent=2))
+            }, indent=2), encoding="utf-8")
 
             samples.append({
                 "sample_id": sample_id,
@@ -186,7 +186,7 @@ def _download_multimodal() -> None:
         "comparison": _COMPARISON,
         "samples": samples,
     }
-    manifest_path.write_text(json.dumps(manifest, indent=2))
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(f"\nManifest written to {manifest_path}")
     print(f"\nMultimodal demo ready ({len(samples)} samples: "
           f"{sum(1 for s in samples if s['condition']=='case')} case, "

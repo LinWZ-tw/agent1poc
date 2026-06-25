@@ -222,7 +222,7 @@ def _inspect_matrix_dir(path: Path) -> dict[str, Any]:
 
 
 def _inspect_multimodal_cohort(path: Path) -> dict[str, Any]:
-    manifest = json.loads((path / "manifest.json").read_text())
+    manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
     samples = manifest.get("samples", [])
     n_scrna = sum(1 for s in samples if s.get("scrna_path"))
     n_wes = sum(1 for s in samples if s.get("wes_path"))
