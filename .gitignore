@@ -1,0 +1,28 @@
+# Pipeline outputs (can be large)
+result/
+
+# Local data — symlinks to machine-specific storage and downloaded demo files
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.so
+.venv/
+venv/
+env/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Secrets
+.env
+*.key

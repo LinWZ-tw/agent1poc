@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bioinformatics Pipeline Agent</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1d212a; --border: #2a2f3a;
+    --text: #e6e8ec; --muted: #8a8f9c; --accent: #5b8def; --accent2: #2f6fed;
+    --ok: #3fb950; --err: #f85149; --warn: #d29922;
+    --wes: #7c6af7; --scrna: #3fb9a0; --reporter: #e8a04a;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+         background: var(--bg); color: var(--text); height:100vh; overflow:hidden; }
+  #app { display:flex; height:100vh; }
+
+  /* ---- sidebar ---- */
+  #sidebar { width: 360px; min-width: 320px; background: var(--panel); border-right: 1px solid var(--border);
+             padding: 16px; overflow-y: auto; }
+  #sidebar h1 { font-size: 15px; margin: 0 0 4px; }
+  #sidebar .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  fieldset { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; padding: 10px 12px; }
+  legend { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 0 4px; }
+  label { display:block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+  input[type=text], input[type=password], textarea, select {
+    width: 100%; background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 8px; font-size: 13px; font-family: inherit; resize: vertical;
+  }
+  textarea { min-height: 54px; }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  .checkbox-row { display:flex; align-items:center; gap:6px; margin-top:8px; }
+  .checkbox-row input { width:auto; }
+  .checkbox-row label { margin:0; color: var(--text); font-size: 13px; }
+  button { cursor:pointer; border:none; border-radius:6px; font-size:13px; font-weight:600; padding: 9px 14px; }
+  #startBtn { width:100%; margin-top:6px; background: var(--accent2); color:#fff; }
+  #startBtn:disabled { background:#384058; color: var(--muted); cursor:not-allowed; }
+  #stateBtn { width:100%; margin-top:8px; background: var(--panel2); color: var(--text); border:1px solid var(--border); }
+  #reportBtn { width:100%; margin-top:8px; background: #163a1e; color: var(--ok); border:1px solid #2a5c35;
+               text-decoration:none; display:block; text-align:center; line-height:1; }
+  #reportBtn:disabled, #reportBtn.hidden { display:none; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; line-height:1.4; }
+  #keyNote { font-size: 11px; color: var(--warn); margin-top: 8px; line-height: 1.4; }
+
+  /* ---- main ---- */
+  #main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #topbar { display:flex; align-items:center; justify-content:space-between; padding: 10px 18px;
+            border-bottom: 1px solid var(--border); background: var(--panel); }
+  #runLabel { font-size: 13px; color: var(--muted); }
+  #runLabel b { color: var(--text); }
+  #statusPill { font-size: 11px; padding: 4px 10px; border-radius: 999px; background:#333; color:#ccc; }
+  #statusPill.thinking { background:#3a3216; color: var(--warn); }
+  #statusPill.waiting_for_user { background:#16331e; color: var(--ok); }
+  #statusPill.error { background:#3a1c1c; color: var(--err); }
+
+  #chat { flex:1; overflow-y:auto; padding: 18px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width: 80%; padding: 10px 13px; border-radius: 10px; font-size: 13.5px; line-height:1.5; white-space:pre-wrap; }
+  .msg.user { align-self:flex-end; background: var(--accent2); color:#fff; }
+  .msg.text { align-self:flex-start; background: var(--panel2); border:1px solid var(--border); }
+  .msg.thinking { align-self:flex-start; background:transparent; border:1px dashed var(--border);
+                  color: var(--muted); font-style:italic; max-width:90%; }
+  .msg.tool { align-self:flex-start; background: var(--panel2); border:1px solid var(--border);
+              max-width:90%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12px; }
+  .msg.tool .head { display:flex; justify-content:space-between; cursor:pointer; color: var(--accent); margin-bottom:4px; }
+  .msg.tool .head .badge { font-size:10px; padding:1px 6px; border-radius:4px; background:#222; color:var(--muted); }
+  .msg.tool.error .head { color: var(--err); }
+  .msg.tool pre { margin:6px 0 0; white-space:pre-wrap; word-break:break-word; color:#c9d1d9; }
+  .msg.tool pre.collapsed { display:none; }
+  .msg.error { align-self:flex-start; background:#3a1c1c; border:1px solid var(--err); color:#ffb4ab; }
+  .msg.system { align-self:center; color: var(--muted); font-size:12px; font-style:italic; }
+
+  /* per-agent colouring */
+  .agent-badge {
+    display:inline-block; font-size:10px; padding:1px 7px; border-radius:4px;
+    font-style:normal; margin-right:6px; font-weight:600; letter-spacing:.03em;
+  }
+  .agent-wes    { background:#2a2060; color: var(--wes); }
+  .agent-scrna  { background:#0d2e28; color: var(--scrna); }
+  .agent-reporter { background:#2e1e07; color: var(--reporter); }
+  /* subagent messages get a left border tint */
+  .msg[data-agent="WES Worker"]    { border-left: 3px solid var(--wes) !important; }
+  .msg[data-agent="scRNA Worker"]  { border-left: 3px solid var(--scrna) !important; }
+  .msg[data-agent="Reporter"]      { border-left: 3px solid var(--reporter) !important; }
+
+  #composer { display:flex; gap:10px; padding: 14px 18px; border-top: 1px solid var(--border); background: var(--panel); }
+  #composer textarea { flex:1; min-height: 42px; max-height:140px; }
+  #composer button { background: var(--accent2); color:#fff; padding: 0 18px; }
+  #composer button:disabled { background:#384058; color:var(--muted); cursor:not-allowed; }
+
+  #stateModal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; }
+  #stateModal.open { display:flex; }
+  #stateBox { background: var(--panel); border:1px solid var(--border); border-radius:10px; width:min(720px,90vw);
+              max-height:80vh; overflow:auto; padding:16px; }
+  #stateBox h3 { margin:0 0 8px; font-size:14px; }
+  #stateBox pre { font-size:12px; white-space:pre-wrap; word-break:break-word; }
+  #stateBox button { margin-top:10px; background: var(--panel2); color:var(--text); border:1px solid var(--border); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="sidebar">
+    <h1>Bioinformatics Pipeline Agent</h1>
+    <div class="sub">Adaptive WES / scRNA pipeline, orchestrated by an LLM via tool use.</div>
+
+    <fieldset>
+      <legend>LLM</legend>
+      <label>Provider</label>
+      <select id="provider">
+        <option value="anthropic">Claude (Anthropic)</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="grok">xAI Grok</option>
+        <option value="openai">OpenAI-compatible (OpenAI, Ollama, vLLM, Groq, Together, Azure...)</option>
+      </select>
+      <label>Model</label>
+      <input type="text" id="model" placeholder="claude-opus-4-8">
+      <label id="baseUrlLabel" style="display:none;">Base URL (only for OpenAI-compatible)</label>
+      <input type="text" id="baseUrl" style="display:none;" placeholder="https://api.openai.com/v1 or http://localhost:11434/v1">
+      <label>API key</label>
+      <input type="password" id="apiKey" placeholder="sk-... (sent only to this local server)">
+      <div id="keyNote">Stays in this browser tab + this local server process; forwarded straight to the chosen LLM API, never logged or written to disk.</div>
+      <div class="row">
+        <div>
+          <label>Effort</label>
+          <select id="effort">
+            <option>low</option><option>medium</option><option selected>high</option><option>xhigh</option><option>max</option>
+          </select>
+        </div>
+        <div>
+          <label>Run ID</label>
+          <input type="text" id="runId" placeholder="auto">
+        </div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="autoApprove" checked>
+        <label for="autoApprove">Auto-approve confirmations (stays mock-only unless you say otherwise)</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Input data</legend>
+      <label>Data path</label>
+      <input type="text" id="dataPath" placeholder="data/WES_OC_fasta or data/scRNA_AML">
+      <div class="hint">Relative to the repo root, or an absolute path. The agent inspects file content itself — it doesn't trust this label. Leave blank with an existing Run ID to resume from checkpoint.</div>
+      <div id="demoHint" class="hint" style="margin-top:8px; display:none; color:var(--warn);">
+        No data yet? Run <code>python download_demo_data.py</code> to fetch a free public PBMC 3k scRNA-seq dataset (~7 MB).
+      </div>
+      <button type="button" id="demoBtn" style="margin-top:8px;width:100%;background:var(--panel2);color:var(--scrna);border:1px solid var(--border);font-size:12px;padding:6px 10px;">
+        Use demo data &nbsp;(data/demo/pbmc3k.h5ad)
+      </button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Study design (optional)</legend>
+      <textarea id="studyDesign" placeholder="e.g. Case-control: 12 tumor vs 8 normal. Compare clusters between groups, not just within one sample."></textarea>
+    </fieldset>
+
+    <fieldset>
+      <legend>Sample info (optional)</legend>
+      <textarea id="sampleNotes" placeholder="e.g. Sample BER16482 is post-chemo relapse; treat as a separate condition from treatment-naive samples."></textarea>
+    </fieldset>
+
+    <fieldset>
+      <legend>Goal (optional override)</legend>
+      <textarea id="goal" placeholder="Default: inspect the data, pick the right branch, run it end to end."></textarea>
+    </fieldset>
+
+    <button id="startBtn">Start run</button>
+    <button id="stateBtn">View checkpoint (state.json)</button>
+    <a id="reportBtn" class="hidden" target="_blank">Open report</a>
+  </div>
+
+  <div id="main">
+    <div id="topbar">
+      <div id="runLabel">No run started yet</div>
+      <div id="statusPill">idle</div>
+    </div>
+    <div id="chat"></div>
+    <div id="composer">
+      <textarea id="msgInput" placeholder="Ask a question, adjust the study design, add sample info, or tell the agent what to do next..." disabled></textarea>
+      <button id="sendBtn" disabled>Send</button>
+    </div>
+  </div>
+
+</div>
+
+<div id="stateModal">
+  <div id="stateBox">
+    <h3>Checkpoint: result/&lt;run_id&gt;/state.json</h3>
+    <pre id="stateContent">(no run yet)</pre>
+    <button id="closeStateBtn">Close</button>
+  </div>
+</div>
+
+<script>
+const el = (id) => document.getElementById(id);
+
+let runId = null;
+let sinceIdx = 0;
+let pollTimer = null;
+let pollInterval = 1000;
+let emptyPollStreak = 0;
+let lastStatus = 'idle';
+
+const DEMO_PATH = 'data/demo/pbmc3k.h5ad';
+
+el('demoBtn').addEventListener('click', async () => {
+  el('dataPath').value = DEMO_PATH;
+  // ask the server if the file exists yet
+  try {
+    const res = await fetch('/api/file_exists?path=' + encodeURIComponent(DEMO_PATH));
+    const data = await res.json();
+    el('demoHint').style.display = data.exists ? 'none' : '';
+  } catch { el('demoHint').style.display = ''; }
+});
+
+const PROVIDER_DEFAULTS = {
+  anthropic: { model: 'claude-opus-4-8',    showBaseUrl: false, apiKeyHint: 'sk-ant-...  (console.anthropic.com)' },
+  gemini:    { model: 'gemini-2.5-flash',   showBaseUrl: false, apiKeyHint: 'AIza...  (aistudio.google.com/apikey)' },
+  grok:      { model: 'grok-3',             showBaseUrl: false, apiKeyHint: 'xai-...   (console.x.ai)' },
+  openai:    { model: 'gpt-4o',             showBaseUrl: true,  apiKeyHint: 'sk-...    (platform.openai.com/api-keys)' },
+};
+
+el('provider').addEventListener('change', () => {
+  const cfg = PROVIDER_DEFAULTS[el('provider').value] || PROVIDER_DEFAULTS.openai;
+  el('baseUrl').style.display = cfg.showBaseUrl ? 'block' : 'none';
+  el('baseUrlLabel').style.display = cfg.showBaseUrl ? 'block' : 'none';
+  if (!el('model').value) el('model').placeholder = cfg.model;
+  el('apiKey').placeholder = cfg.apiKeyHint;
+});
+
+function agentBadgeHtml(agent) {
+  if (!agent) return '';
+  const cls = agent === 'WES Worker' ? 'agent-wes'
+            : agent === 'scRNA Worker' ? 'agent-scrna'
+            : agent === 'Reporter' ? 'agent-reporter'
+            : '';
+  return `<span class="agent-badge ${cls}">${escapeHtml(agent)}</span>`;
+}
+
+function addMsg(cls, html, agent) {
+  const chat = el('chat');
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  if (agent) div.dataset.agent = agent;
+  div.innerHTML = html;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderEvent(ev) {
+  const badge = agentBadgeHtml(ev.agent);
+  if (ev.type === 'user') {
+    addMsg('user', escapeHtml(ev.text));
+  } else if (ev.type === 'text') {
+    addMsg('text', badge + escapeHtml(ev.text), ev.agent);
+  } else if (ev.type === 'thinking') {
+    addMsg('thinking', badge + '💭 ' + escapeHtml(ev.text), ev.agent);
+  } else if (ev.type === 'tool_call') {
+    const div = addMsg('tool', `<div class="head">${badge}<span>&#8594; ${escapeHtml(ev.name)}</span><span class="badge">call</span></div>` +
+      `<pre class="collapsed">${escapeHtml(JSON.stringify(ev.input, null, 2))}</pre>`, ev.agent);
+    // auto-expand tool calls; results start collapsed
+    div.querySelector('pre').classList.remove('collapsed');
+    div.querySelector('.head').addEventListener('click', () => {
+      div.querySelector('pre').classList.toggle('collapsed');
+    });
+  } else if (ev.type === 'tool_result') {
+    const content = JSON.stringify(ev.output, null, 2);
+    const div = addMsg('tool' + (ev.is_error ? ' error' : ''),
+      `<div class="head">${badge}<span>&#8592; ${escapeHtml(ev.name)}</span><span class="badge">${ev.is_error ? 'error' : 'result'} (click to toggle)</span></div>` +
+      `<pre class="collapsed">${escapeHtml(content)}</pre>`, ev.agent);
+    div.querySelector('.head').addEventListener('click', () => {
+      div.querySelector('pre').classList.toggle('collapsed');
+    });
+  } else if (ev.type === 'error') {
+    addMsg('error', badge + '⚠️ ' + escapeHtml(ev.text), ev.agent);
+  } else if (ev.type === 'system') {
+    addMsg('system', badge + escapeHtml(ev.text), ev.agent);
+  }
+}
+
+function setStatus(status) {
+  const pill = el('statusPill');
+  pill.textContent = status;
+  pill.className = status;
+  const composerEnabled = status === 'waiting_for_user' || status === 'idle' || status === 'error';
+  el('msgInput').disabled = !runId || !composerEnabled;
+  el('sendBtn').disabled = !runId || !composerEnabled;
+  lastStatus = status;
+}
+
+async function checkReportReady() {
+  if (!runId) return;
+  try {
+    const res = await fetch(`/api/sessions/${runId}/report_ready`);
+    const data = await res.json();
+    if (data.ready && data.url) {
+      const btn = el('reportBtn');
+      btn.href = data.url;
+      btn.textContent = '📊 Open report';
+      btn.classList.remove('hidden');
+    }
+  } catch (_) {}
+}
+
+async function poll() {
+  if (!runId) return;
+  try {
+    const res = await fetch(`/api/sessions/${runId}/events?since=${sinceIdx}`);
+    const data = await res.json();
+    if (data.error) return;
+
+    if (data.events.length > 0) {
+      emptyPollStreak = 0;
+      data.events.forEach(renderEvent);
+      // check for report on status transitions
+      const hadReport = data.events.some(e => e.type === 'system' && e.agent === 'Reporter' && e.text && e.text.includes('finished'));
+      if (hadReport) checkReportReady();
+    } else {
+      emptyPollStreak++;
+    }
+
+    sinceIdx = data.next;
+    setStatus(data.status);
+
+    // snap back to 1s if agent resumes autonomously while we were backed off
+    if (data.status === 'thinking' && pollInterval !== 1000) {
+      startPolling();
+    } else if (data.status === 'waiting_for_user' && emptyPollStreak >= 3 && pollInterval === 1000) {
+      // back off to 5s once idle with no new events for 3+ consecutive polls
+      clearInterval(pollTimer);
+      pollInterval = 5000;
+      pollTimer = setInterval(poll, pollInterval);
+    }
+  } catch (_) { /* transient network hiccup; next tick retries */ }
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  emptyPollStreak = 0;
+  pollInterval = 1000;
+  pollTimer = setInterval(poll, pollInterval);
+}
+
+el('startBtn').addEventListener('click', async () => {
+  el('startBtn').disabled = true;
+  const body = {
+    run_id: el('runId').value.trim() || undefined,
+    provider: el('provider').value,
+    model: el('model').value.trim() || undefined,
+    base_url: el('baseUrl').value.trim() || undefined,
+    api_key: el('apiKey').value,
+    effort: el('effort').value,
+    auto_approve: el('autoApprove').checked,
+    data_path: el('dataPath').value.trim(),
+    study_design: el('studyDesign').value,
+    sample_notes: el('sampleNotes').value,
+    goal: el('goal').value.trim() || undefined,
+  };
+  try {
+    const res = await fetch('/api/sessions', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (data.error) {
+      addMsg('error', escapeHtml(data.error));
+      el('startBtn').disabled = false;
+      return;
+    }
+    runId = data.run_id;
+    el('runLabel').innerHTML = `Run: <b>${escapeHtml(runId)}</b>`;
+    el('reportBtn').classList.add('hidden');
+
+    if (data.resumed) {
+      // reconnect: don't clear chat, just resume polling from last known index
+      sinceIdx = typeof data.event_count === 'number' ? data.event_count : 0;
+      addMsg('system', `reconnected to run "${runId}" (${sinceIdx} prior events)`);
+    } else {
+      el('chat').innerHTML = '';
+      sinceIdx = 0;
+      addMsg('system', `started run "${runId}"`);
+    }
+
+    setStatus(data.status);
+    startPolling();
+    // check immediately in case report already exists (e.g. after resume)
+    checkReportReady();
+  } finally {
+    el('startBtn').disabled = false;
+  }
+});
+
+async function sendMessage() {
+  const text = el('msgInput').value.trim();
+  if (!text || !runId) return;
+  el('msgInput').value = '';
+  startPolling(); // reset to 1s on new user activity
+  setStatus('thinking');
+  await fetch(`/api/sessions/${runId}/message`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({text}) });
+}
+el('sendBtn').addEventListener('click', sendMessage);
+el('msgInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+el('stateBtn').addEventListener('click', async () => {
+  if (!runId) { el('stateContent').textContent = 'No run started yet.'; }
+  else {
+    const res = await fetch(`/api/sessions/${runId}/state`);
+    const data = await res.json();
+    el('stateContent').textContent = JSON.stringify(data, null, 2);
+  }
+  el('stateModal').classList.add('open');
+});
+el('closeStateBtn').addEventListener('click', () => el('stateModal').classList.remove('open'));
+</script>
+</body>
+</html>
