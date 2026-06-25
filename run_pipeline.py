@@ -18,6 +18,13 @@ import os
 import sys
 from pathlib import Path
 
+# Force UTF-8 on stdout/stderr regardless of the OS locale (e.g. cp950 on
+# Traditional Chinese Windows) so LLM output with ≥ β → etc. never crashes.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from agent_pipeline.agents.planner import run
