@@ -1,0 +1,7 @@
+{
+  "type": "wes_mock_stub",
+  "sample_id": "case_donor1",
+  "condition": "case",
+  "donor_id": "patient_101",
+  "note": "Mock WES stub \u2014 pipeline runs GATK HaplotypeCaller in mock mode (no real FASTQ required for demo)."
+}

@@ -1,0 +1,45 @@
+{
+  "study": "Kang 2018 IFN-\u03b2 stimulated PBMCs (case-control multimodal demo)",
+  "source": "GSE96583 \u2014 Kang et al., 2018, Nature Biotechnology",
+  "design": "case_control",
+  "group_column": "condition",
+  "comparison": "IFN-\u03b2 stimulated PBMCs (case) vs. unstimulated control PBMCs",
+  "samples": [
+    {
+      "sample_id": "case_donor1",
+      "condition": "case",
+      "donor_id": "patient_101",
+      "scrna_path": "data/demo_multimodal/scRNA/case_donor1.h5ad",
+      "wes_path": "data/demo_multimodal/WES/case_donor1",
+      "n_cells": 1166,
+      "n_genes": 15706
+    },
+    {
+      "sample_id": "case_donor2",
+      "condition": "case",
+      "donor_id": "patient_1015",
+      "scrna_path": "data/demo_multimodal/scRNA/case_donor2.h5ad",
+      "wes_path": "data/demo_multimodal/WES/case_donor2",
+      "n_cells": 2352,
+      "n_genes": 15706
+    },
+    {
+      "sample_id": "ctrl_donor1",
+      "condition": "ctrl",
+      "donor_id": "patient_101",
+      "scrna_path": "data/demo_multimodal/scRNA/ctrl_donor1.h5ad",
+      "wes_path": "data/demo_multimodal/WES/ctrl_donor1",
+      "n_cells": 858,
+      "n_genes": 15706
+    },
+    {
+      "sample_id": "ctrl_donor2",
+      "condition": "ctrl",
+      "donor_id": "patient_1015",
+      "scrna_path": "data/demo_multimodal/scRNA/ctrl_donor2.h5ad",
+      "wes_path": "data/demo_multimodal/WES/ctrl_donor2",
+      "n_cells": 2738,
+      "n_genes": 15706
+    }
+  ]
+}
