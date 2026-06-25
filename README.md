@@ -12,26 +12,104 @@ and any OpenAI-compatible endpoint (OpenAI, Ollama, vLLM, Groq, etc.).
 ```bash
 # 1. Install dependencies
 pip install -r requirements.txt
+pip install pertpy          # needed for the multimodal demo
 
-# 2. Download a free public demo dataset (~7 MB, no account needed)
+# 2. Download the case-control multimodal demo (~100 MB, no account needed)
 python download_demo_data.py
-# → saves data/demo/pbmc3k.h5ad  (PBMC 3k, 2,700 cells × 32,738 genes)
-
-# 3. Start the web GUI
-python server.py
-# → open http://127.0.0.1:8000
+# → saves data/demo_multimodal/
+#     manifest.json          study design + sample list
+#     scRNA/case_donor1.h5ad   IFN-β stimulated (case, 1166 cells)
+#     scRNA/case_donor2.h5ad   IFN-β stimulated (case, 2352 cells)
+#     scRNA/ctrl_donor1.h5ad   unstimulated (control, 858 cells)
+#     scRNA/ctrl_donor2.h5ad   unstimulated (control, 2738 cells)
+#     WES/case_donor*/         mock WES stubs (GATK pipeline, no FASTQ needed)
+#
+# Dataset: Kang et al. 2018, Nature Biotechnology — GSE96583
+# Design:  IFN-β stimulated (case) vs. unstimulated (control) PBMCs,
+#          2 donors per group, 8 cell types annotated
 ```
 
-In the browser:
-1. **Provider** — pick Claude, Gemini, or Grok (or OpenAI-compatible for others)
-2. **API key** — paste your key (see where to get one below)
-3. **Data path** — click **"Use demo data"** (or type `data/demo/pbmc3k.h5ad`)
-4. Click **Start run**
+### Option A — Web GUI
 
-The agent inspects the data, picks the scRNA branch, runs all four steps
-(cell annotation → clustering → differential expression → GSEA), generates
-figures, and writes an HTML report. When done, a green **"Open report"**
-button appears in the sidebar.
+```bash
+python server.py    # open http://127.0.0.1:8000
+```
+
+1. **Provider** — pick Claude, Gemini, or Grok (or OpenAI-compatible for others)
+2. **API key** — paste your key (see [API keys](#api-keys) below)
+3. **Data path** — type `data/demo_multimodal`
+4. **Study design** — optionally add: `"Case-control: IFN-β stimulated vs unstimulated PBMCs"`
+5. Click **Start run**
+
+The agent detects the `manifest.json`, identifies the case-control multi-modal
+scenario, dispatches scRNA workers (cell annotation → clustering → DE between
+groups → GSEA) and WES workers (GATK germline, mock mode) for all four samples,
+then synthesizes an integrated HTML report. A green **"Open report"** button
+appears in the sidebar when done.
+
+### Option B — CLI (no browser needed)
+
+```bash
+# Set your API key once (or pass --api-key on every command)
+export ANTHROPIC_API_KEY=sk-ant-...   # Claude
+# export GEMINI_API_KEY=AIza...       # Gemini
+# export OPENAI_API_KEY=sk-...        # OpenAI / OpenAI-compatible
+
+# Run the full LLM pipeline on the multimodal demo
+python run_pipeline.py \
+  --data data/demo_multimodal \
+  --run-id kang-demo \
+  --goal "Case-control: IFN-β stimulated (case) vs unstimulated (control) PBMCs, 2 donors per group"
+
+# When done, open the report
+open result/kang-demo/report/report.html          # macOS
+xdg-open result/kang-demo/report/report.html      # Linux
+# or just navigate to result/kang-demo/report/ in your file browser
+```
+
+**The CLI is fully interactive.** The agent pauses at each decision point and
+waits for your reply at a `You:` prompt. You can:
+
+- **Correct the scenario** — e.g. `"This is somatic, not germline — the normal sample is OC_normal"`
+- **Add sample metadata** — e.g. `"Donors 1 and 2 are BRCA1-mutant, donors 3 and 4 are wild-type"`
+- **Adjust the plan** — e.g. `"Skip GSEA, focus only on DE between tumor and normal"`
+- **Accept and proceed** — just press **Enter** (empty reply)
+- **Stop early** — press **Ctrl-C**
+
+A typical session looks like:
+
+```
+────────────────────────────────────────────────────────────────
+[planner:tool_use] inspect_data_source({"path": "data/demo_multimodal"})
+[planner:tool_result] {"data_type": "multimodal_cohort", ...}
+
+## Analysis Plan
+
+### Data
+- Type: multimodal_cohort
+- Samples: case_donor1 (1166 cells), case_donor2 (2352 cells), ...
+...
+
+Shall I proceed, or would you like to adjust any part of the plan?
+────────────────────────────────────────────────────────────────
+You: Add a note that donors 1-2 are BRCA1-mutant — include that in the comparison
+────────────────────────────────────────────────────────────────
+[planner updates comparison field and re-presents plan]
+...
+You:                    ← press Enter to accept and start dispatch
+```
+
+The full transcript (every turn, tool call, and result) is saved to
+`result/<run_id>/agent_log.jsonl` regardless of how you interact.
+
+**Single-sample scRNA demo** (no pertpy needed, ~7 MB):
+
+```bash
+python download_demo_data.py --demo scrna
+# → data/demo/pbmc3k.h5ad  (PBMC 3k, 2,700 cells × 32,738 genes)
+
+python run_pipeline.py --data data/demo/pbmc3k.h5ad --run-id pbmc-demo
+```
 
 ### API keys
 
@@ -46,34 +124,6 @@ Keys are sent from the browser to this local server process only, forwarded
 directly to the chosen SDK, and never logged or written to disk.
 
 ---
-
-## Why two branches, and why names aren't trusted
-
-`data/WES_OC_fasta` (originally named `data/OC_scRNA_fasta` — renamed once
-the mismatch was found) is a symlink to whole-exome sequencing (WES) fastq
-archives, not scRNA-seq data, despite its original name — confirmed by
-reading the manifest files and peeking read lengths inside the zips (see
-`src/agent_pipeline/steps/detect.py`). The real scRNA-seq data for the OC
-cohort exists only as already-processed CellRanger `.h5` matrices and
-`.h5ad` AnnData objects under `StrasbourgOC/data/scRNA/` and
-`StrasbourgOC/data/*.h5ad` — there is no raw scRNA fastq for OC on disk.
-
-`data/scRNA_AML` is a symlink to `StrasbourgAML/data/raw`: a directory of 36
-already-processed CellRanger `.h5` matrices (one per AML patient/sample) —
-this one's name matches its content, and `inspect_data_source` confirms it
-(`scrna_matrix_directory`, verified against a representative file: 36,601
-genes × 2,448 cells). Used as the deliberate "opposite case" test of the
-adaptive routing logic.
-
-So the agent's job is to detect each input's real type and route accordingly:
-
-- **WES branch** (`dna_exome_fastq_archive`): QC (fastp) → alignment (bwa
-  mem) → mutation calling (GATK4: MarkDuplicates → BQSR → HaplotypeCaller)
-- **scRNA branch** (`scrna_count_matrix` / `scrna_h5ad` / `scrna_matrix_directory`):
-  cell-type annotation (marker scoring) → clustering (Harmony + Leiden) →
-  differential expression (`rank_genes_groups`) → GSEA (`gseapy.prerank`
-  against local MSigDB/KEGG/GO/Reactome `.gmt` files at
-  `data/RefGenome/*.gmt`)
 
 ## Architecture
 
@@ -95,9 +145,9 @@ functions — they delegate down.
 ┌──────────────────────────────────────────────────────────────────┐
 │  Layer 1 — Planner Agent   agents/planner.py                     │
 │  • Inspects data (inspect_data_source / list_available_assets)   │
+│  • Identifies analysis scenario from data type + user goal       │
 │  • Builds and presents an analysis plan                          │
 │  • Dispatches tasks to one or more worker agents (Layer 2)       │
-│  • Monitors worker progress; re-plans on failure or user change  │
 │  • Hands the completed checkpoint to the Reporter (Layer 3)      │
 └──────────┬───────────────────────────────┬───────────────────────┘
            │ WES task                      │ scRNA task
@@ -125,39 +175,56 @@ functions — they delegate down.
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+### Supported analysis scenarios
+
+The Planner detects the scenario from the data type and your stated goal,
+then sets the appropriate analysis parameters for each worker.
+
+| Scenario | Data | Goal |
+|---|---|---|
+| `within_sample` | scRNA, single group | Characterise cell types and cluster markers |
+| `multi_group` | scRNA, 2+ groups | DE between case/control or treatment groups |
+| `trajectory` | scRNA, time-series or differentiation | Pseudotime / disease progression |
+| `tme` | scRNA, mixed tumour+immune | Immune infiltration, exhaustion, TME composition |
+| `germline` | WES, single sample | Germline variant discovery |
+| `somatic` | WES, tumour + matched normal | Somatic mutation calling (paired) |
+| `multimodal` | WES + scRNA, ad-hoc paths | Integrate mutation landscape with cell-state findings |
+| `multimodal_cohort` | Directory with `manifest.json` | Full case-control cohort: per-sample scRNA + WES dispatched from a single path |
+
 ### File layout
 
 ```
 requirements.txt         pip dependencies (anthropic, openai, matplotlib, scanpy, anndata, h5py)
-download_demo_data.py    downloads the public PBMC 3k scRNA-seq dataset for demo/testing
+download_demo_data.py    downloads demo datasets: Kang 2018 multimodal (default) or PBMC 3k scRNA
 run_pipeline.py          CLI entrypoint: goal → planner agent, runs to completion
 server.py                web server: GUI ↔ planner agent session
 static/index.html        browser GUI (provider picker, API key, data path, chat panel)
 test_dispatch.py         no-LLM step-library test harness; optionally calls Reporter with --api-key
 src/agent_pipeline/
   agents/
-    planner.py           Layer 1: data understanding, plan creation, worker dispatch
+    planner.py           Layer 1: scenario detection, plan creation, worker dispatch
     wes_agent.py         Layer 2: WES pipeline execution agent
     scrna_agent.py       Layer 2: scRNA pipeline execution agent
     reporter.py          Layer 3: result synthesis, report & figure generation
   prompts/
-    planner.py           system prompt for the planner (branch logic, tool catalog)
-    wes.py               system prompt for the WES worker
-    scrna.py             system prompt for the scRNA worker
+    planner.py           system prompt for the planner (scenario routing, dispatch patterns)
+    wes.py               system prompt for the WES worker (germline / somatic / multimodal)
+    scrna.py             system prompt for the scRNA worker (within_sample / multi_group / trajectory / tme)
     reporter.py          system prompt for the reporter
   figures.py             matplotlib figure generation from checkpoint data (no display
                          required); 6 plot types per branch: cell-type composition, mock
                          UMAP, cluster sizes, DE genes, GSEA, WES variant summary
   providers.py           LLM provider abstraction: AnthropicProvider, OpenAIProvider,
                          make_provider(); Gemini and Grok route through OpenAIProvider
-                         with fixed base URLs; per-agent tool list injected at construction
-  tools.py               8 tool schemas + dispatch table → steps/*; per-agent subsets:
+                         with fixed base URLs; model fallback on 503/429/529
+  tools.py               tool schemas + dispatch table → steps/*; per-agent subsets:
                          PLANNER_TOOLS, WORKER_TOOLS, REPORTER_TOOLS
   jobs.py                background job queue (start/poll/result)
   state.py               checkpoint persistence: result/<run_id>/state.json + agent_log.jsonl;
                          report_dir() helper for result/<run_id>/report/
   steps/
-    detect.py            classifies a path without extracting any archive
+    detect.py            classifies a path without extracting any archive;
+                         returns multimodal_cohort for directories with manifest.json
     qc.py                fastp (WES)
     alignment.py         bwa mem → sorted+indexed BAM (WES)
     mutation.py          GATK4 germline calling (WES)
@@ -170,11 +237,7 @@ src/agent_pipeline/
 Every step module has a `mode="mock"` path (fast, synthetic-but-plausible
 metrics seeded deterministically from the real input's path/size — so
 repeated mock runs on the same input agree) and a `mode="real"` path that
-shells out to / calls the actual tool. **This repo's demo runs only exercise
-mock mode** — real mode is fully wired (reference genome, dbSNP known-sites,
-and gene-set files are all already present under `data/RefGenome/`) but
-deliberately not executed here, since a real run touches ~1TB of compressed
-data and can take hours.
+shells out to / calls the actual tool.
 
 All heavy steps go through `start_job` / `check_job_status` / `get_job_result`
 (`jobs.py`) uniformly — even in mock mode — so the tool-calling contract
@@ -199,9 +262,10 @@ sequenceDiagram
     U->>P: goal + data path + study context
     P->>T: inspect_data_source / list_available_assets
     T-->>P: data_type, sample list
+    P->>P: identify scenario (within_sample / multi_group / tme / germline / somatic ...)
     P->>U: present analysis plan (waiting_for_user)
     U-->>P: confirm / adjust plan
-    P->>W: dispatch task (branch + sample list + step sequence)
+    P->>W: dispatch_worker(branch, scenario, groups, comparison, ...)
 
     opt WES real mode only
         W->>T: locate_fastq_pairs(directory)
@@ -227,11 +291,6 @@ sequenceDiagram
     R-->>U: result/<run_id>/report/{report.md, report.html, figures/}
 ```
 
-The web GUI runs the planner agent inside a background thread (via `session.py`)
-that pauses at `waiting_for_user` to receive user corrections or follow-up
-questions, then resumes. The CLI runs the same planner-to-worker-to-reporter
-chain to completion without pausing.
-
 ### Diagram 2: data-driven branching and reporting
 
 ```mermaid
@@ -239,19 +298,28 @@ flowchart TD
     A([Input path]) --> B[/Planner: inspect_data_source/]
     B --> C{data_type?}
 
+    C -->|multimodal_cohort<br/>manifest.json| MM[Per-sample dispatch loop]
+    MM -->|scrna_path per sample| SCRNA2[scRNA Worker Agent<br/>scenario=multi_group]
+    MM -->|wes_path per sample| WES2[WES Worker Agent<br/>scenario=germline]
+    SCRNA2 --> CP
+    WES2 --> CP
+
     C -->|dna_exome_fastq_archive| WES[WES Worker Agent]
-    WES --> LFP[/locate_fastq_pairs<br/>real mode: find R1/R2 pairs/]
-    LFP --> D1[qc: fastp]
-    D1 --> D2[alignment: bwa mem vs GRCh38]
-    D2 --> D3[mutation_calling: GATK4<br/>MarkDuplicates → BQSR → HaplotypeCaller]
-    D3 --> CP[(state.json checkpoint)]
+    WES --> SC{scenario?}
+    SC -->|germline| D1[qc → alignment → mutation_calling<br/>GATK4 HaplotypeCaller]
+    SC -->|somatic| D2[qc → alignment → mutation_calling<br/>⚠️ Mutect2 not yet implemented]
+    D1 --> CP[(state.json checkpoint)]
+    D2 --> CP
 
     C -->|scrna_count_matrix / scrna_h5ad / scrna_matrix_directory| SCRNA[scRNA Worker Agent]
-    SCRNA --> E0[/list_available_assets: pick sample file/]
-    E0 --> E1[cell_annotation: marker-score typing]
-    E1 --> E2[clustering: Harmony + Leiden]
-    E2 --> E3[differential_expression: rank_genes_groups]
-    E3 --> E4[gsea: gseapy prerank vs local .gmt]
+    SCRNA --> SS{scenario?}
+    SS -->|within_sample| E1[annotation → clustering → DE between clusters → GSEA]
+    SS -->|multi_group| E2[annotation → clustering → DE between groups → GSEA]
+    SS -->|trajectory| E3[annotation → clustering → DE early vs late → GSEA<br/>⚠️ pseudotime not yet implemented]
+    SS -->|tme| E4[annotation → clustering → DE by TME compartment → GSEA<br/>⚠️ CellChat not yet implemented]
+    E1 --> CP
+    E2 --> CP
+    E3 --> CP
     E4 --> CP
 
     CP --> REP[Reporter Agent<br/>read_checkpoint → Markdown synthesis]
@@ -275,23 +343,23 @@ pip install -r requirements.txt
 | Package | Needed for |
 |---|---|
 | `anthropic>=0.111` | Claude provider (Planner, Worker, Reporter agents) |
-| `openai>=1.0` | Gemini, Grok, and OpenAI-compatible providers (all route through `OpenAIProvider`) |
+| `openai>=1.0` | Gemini, Grok, and OpenAI-compatible providers |
 | `matplotlib>=3.7` | `figures.py` — PNG plots for the HTML report (Agg backend, no display needed) |
-| `scanpy>=1.9` | scRNA steps (mock mode: header peeking; real mode: clustering, DE, GSEA) |
+| `scanpy>=1.9` | scRNA steps and demo data download |
 | `anndata>=0.9` | scRNA `.h5ad` file I/O |
-| `h5py>=3.8` | CellRanger `.h5` matrix reading and demo data download |
+| `h5py>=3.8` | CellRanger `.h5` matrix reading |
+| `pertpy` | Multimodal demo download (`python download_demo_data.py`) — `pip install pertpy` |
 
 Both `anthropic` and `openai` are always required — `openai` is used for
-Gemini and Grok even though they are not OpenAI products, because both
-vendors expose an OpenAI-compatible REST endpoint.
+Gemini and Grok because both vendors expose an OpenAI-compatible REST endpoint.
 
 **Real-mode only** (not in `requirements.txt` — installed separately):
 
-| What | Needed for | Where |
+| What | Needed for | Notes |
 |---|---|---|
 | `harmonypy`, `leidenalg`, `gseapy` | scRNA real-mode steps | base conda env |
 | `bwa`, `gatk4`, `picard`, `samtools`, `bcftools`, `fastp` | WES real-mode steps | conda env `wes` |
-| `unzip`, `gunzip` | `detect.py` peeking inside fastq zip archives | system tools |
+| `unzip`, `gunzip` | `detect.py` — peek inside fastq zip archives | system tools |
 
 Mock mode (the default) only needs the packages in `requirements.txt`.
 
@@ -303,31 +371,47 @@ Mock mode (the default) only needs the packages in `requirements.txt`.
 | Google Gemini | aistudio.google.com/apikey | `gemini-2.5-flash` |
 | xAI Grok | console.x.ai | `grok-3` |
 | OpenAI | platform.openai.com/api-keys | `gpt-4o` |
-| OpenAI-compatible (Ollama, vLLM, Groq, ...) | varies | set `--model` explicitly |
+| OpenAI-compatible (Ollama, vLLM, Groq, ...) | varies | set model explicitly |
 
-The Model field in the GUI can be left blank to use the provider's default.
+The `--model` flag (CLI) or Model field (GUI) can be left blank to use the
+provider's default. When a model returns a 503 / 429 / 529 overload error,
+the provider automatically retries with the next model in its fallback list.
 
-### Data
+### Supported input formats
 
-| Path | What it is | Required for |
-|---|---|---|
-| `data/demo/pbmc3k.h5ad` | PBMC 3k scRNA-seq dataset; run `download_demo_data.py` | demo / first-time use |
-| `data/WES_OC_fasta` | symlink → exome fastq archives (StrasbourgOC, ~1TB zipped) | WES branch example |
-| `data/scRNA_AML` | symlink → 36 CellRanger `.h5` matrices (StrasbourgAML) | scRNA branch example |
-| `data/RefGenome` | symlink → `/mnt/Storage5/RefGenome` | real-mode only |
-| `data/RefGenome/GRCh38/...fa` + BWA index | bwa-indexed GRCh38 reference | real-mode `alignment.py` |
-| `data/RefGenome/dbSNP_GCF_000001405.40.gz(.tbi)` | known-sites VCF for BQSR | real-mode `mutation.py` |
-| `data/RefGenome/*.gmt` | MSigDB / KEGG / GO / Reactome gene sets | real-mode `gsea.py` |
+`detect.py` classifies inputs by file content, not by name. Supported shapes:
 
-To point the framework at a new dataset, pass any absolute path or a
-repo-relative path to `--data` / `inspect_data_source`. `detect.py`
-classifies by file content, not by name.
+| Input | Detected as |
+|---|---|
+| Directory containing `manifest.json` (per-sample scRNA + WES paths) | `multimodal_cohort` |
+| Directory of fastq-in-zip archives with `list_part_*` / `*.md5` manifests | `dna_exome_fastq_archive` or `scrna_fastq_archive` |
+| Single `.h5` file (CellRanger output) | `scrna_count_matrix` |
+| Single `.h5ad` file (AnnData) | `scrna_h5ad` |
+| Directory containing multiple `.h5` or `.h5ad` files | `scrna_matrix_directory` |
+| Anything else | `unknown*` — reported, not guessed |
 
-Supported input shapes: a directory of fastq-in-zip archives with manifests
-(→ `dna_exome_fastq_archive` or `scrna_fastq_archive`), a single `.h5`
-(→ `scrna_count_matrix`), a single `.h5ad` (→ `scrna_h5ad`), or a directory
-of multiple `.h5`/`.h5ad` files (→ `scrna_matrix_directory`). Anything else
-returns `unknown*` rather than a guess.
+The `manifest.json` format (used by the multimodal demo):
+
+```json
+{
+  "study": "...",
+  "design": "case_control",
+  "group_column": "condition",
+  "comparison": "IFN-β stimulated PBMCs (case) vs. unstimulated control PBMCs",
+  "samples": [
+    {
+      "sample_id": "case_donor1",
+      "condition": "case",
+      "scrna_path": "data/demo_multimodal/scRNA/case_donor1.h5ad",
+      "wes_path":   "data/demo_multimodal/WES/case_donor1",
+      "n_cells": 1166
+    }
+  ]
+}
+```
+
+Pass any absolute path or a repo-relative path to `--data` /
+`inspect_data_source`. The agent never trusts the file or directory name.
 
 ## Running it
 
@@ -349,6 +433,16 @@ re-enter the same run ID with the data path blank — the server detects the
 existing checkpoint and sends a resume-context message instead of starting
 fresh.
 
+**Describing your study design** in the optional fields helps the Planner
+pick the right scenario automatically:
+
+- *"Case/control: 6 AML patients vs 4 healthy donors, condition column is 'group'"*
+  → Planner picks `multi_group`, sets `group_column="group"`
+- *"Paired tumour and matched blood normal for each patient"*
+  → Planner picks `somatic` WES scenario, links pairs
+- *"Characterise immune infiltration in the TME"*
+  → Planner picks `tme` scRNA scenario
+
 ### CLI — step library test (no API key needed)
 
 `test_dispatch.py` drives the same dispatch / job-queue / checkpoint layer
@@ -363,10 +457,8 @@ python test_dispatch.py --data data/demo/pbmc3k.h5ad --run-id demo
 python test_dispatch.py --data data/demo/pbmc3k.h5ad --run-id demo \
   --api-key sk-ant-...
 
-# Other dataset examples:
-python test_dispatch.py --data data/scRNA_AML --run-id aml1          # 1 sample
-python test_dispatch.py --data data/scRNA_AML --all --limit 5 --run-id aml5
-python test_dispatch.py --data data/WES_OC_fasta --run-id wes1
+# Directory of samples — run first 5:
+python test_dispatch.py --data /path/to/scrna_dir --all --limit 5 --run-id batch1
 ```
 
 Reporter flags: `--api-key`, `--provider` (`anthropic`/`openai`/`gemini`/`grok`),
@@ -374,16 +466,107 @@ Reporter flags: `--api-key`, `--provider` (`anthropic`/`openai`/`gemini`/`grok`)
 
 ### CLI — full LLM pipeline
 
-`run_pipeline.py` lets the LLM itself inspect the data and decide the branch:
+`run_pipeline.py` lets the LLM itself inspect the data, decide the scenario,
+present a plan, and run all steps. No browser required.
+
+**API key** — set via environment variable or `--api-key` flag:
 
 ```bash
+# Environment variable (recommended — set once per session)
 export ANTHROPIC_API_KEY=sk-ant-...
-python run_pipeline.py --data data/demo/pbmc3k.h5ad --run-id demo
-python run_pipeline.py --data data/WES_OC_fasta --run-id wes1
+export GEMINI_API_KEY=AIza...
+export OPENAI_API_KEY=sk-...
+export GROK_API_KEY=xai-...
+
+# Or pass inline
+python run_pipeline.py --api-key sk-ant-... --data ...
 ```
 
-Flags: `--goal`, `--effort` (`low`/`medium`/`high`/`xhigh`/`max`, default `high`),
-`--max-iterations` (default 40).
+**Common invocations:**
+
+```bash
+# Multimodal case-control (Kang 2018 scRNA + mock WES) — default demo
+python run_pipeline.py \
+  --data data/demo_multimodal \
+  --run-id kang-demo
+
+# Multimodal tumor/normal OC (real scRNA + real WES FASTQ, mock mode)
+python run_pipeline.py \
+  --data data/demo_multimodal_OC \
+  --run-id OC-demo \
+  --goal "Ovarian carcinoma: tumor vs normal tissue, somatic WES + scRNA multi-group"
+
+# Single-sample scRNA
+python run_pipeline.py \
+  --data data/demo/pbmc3k.h5ad \
+  --run-id pbmc-demo
+
+# WES somatic — provide paired normal context in --goal
+python run_pipeline.py \
+  --data /path/to/tumor_fastqs \
+  --run-id wes-somatic \
+  --goal "Somatic mutation calling; paired normal sample is at /path/to/normal_fastqs"
+
+# Use Gemini instead of Claude
+python run_pipeline.py \
+  --provider gemini \
+  --data data/demo_multimodal \
+  --run-id kang-gemini
+
+# Use OpenAI-compatible endpoint (e.g. Ollama, Groq)
+python run_pipeline.py \
+  --provider openai \
+  --model llama3.1:70b \
+  --base-url http://localhost:11434/v1 \
+  --api-key ollama \
+  --data data/demo/pbmc3k.h5ad \
+  --run-id pbmc-ollama
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--data` | *(required)* | Path to data file or directory (`manifest.json` directory for multimodal) |
+| `--run-id` | `cli-run` | Results go to `result/<run-id>/` |
+| `--goal` | auto-detect | Pre-load study design context so the agent starts with the right scenario. You can also provide or correct this interactively at the `You:` prompt. |
+| `--provider` | `anthropic` | `anthropic` / `gemini` / `grok` / `openai` |
+| `--api-key` | env var | Falls back to `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` etc. |
+| `--model` | provider default | Override the model (e.g. `claude-sonnet-4-6`, `gemini-2.5-pro`) |
+| `--base-url` | provider default | Custom endpoint for OpenAI-compatible servers |
+| `--effort` | `high` | `low` / `medium` / `high` / `xhigh` / `max` — controls reasoning depth |
+| `--max-iterations` | `40` | Safety cap on agent turns |
+
+**Study design tips** — the `--goal` string is passed verbatim to the Planner.
+The more specific it is, the better the scenario detection:
+
+```bash
+# Triggers multi_group scRNA + germline WES
+--goal "Case-control: 4 AML patients vs 4 healthy donors, condition column is 'group'"
+
+# Triggers somatic WES pairing
+--goal "Paired tumour and matched blood normal; tumour sample IDs end in _T"
+
+# Triggers tme scenario
+--goal "Characterise immune infiltration in the tumour microenvironment"
+
+# Triggers trajectory
+--goal "Order cells by differentiation from HSC to blast along disease progression"
+```
+
+**Viewing results:**
+
+```bash
+# HTML report (open in browser)
+open result/<run-id>/report/report.html          # macOS
+xdg-open result/<run-id>/report/report.html      # Linux
+
+# Full agent transcript
+cat result/<run-id>/agent_log.jsonl | python -m json.tool | less
+
+# Step checkpoint (all inputs/outputs)
+cat result/<run-id>/state.json | python -m json.tool
+```
 
 ### Outputs
 
@@ -421,5 +604,13 @@ this framework never auto-extracts a multi-hundred-GB archive):
 file already on disk; the base conda env (scanpy, anndata, harmonypy,
 leidenalg, gseapy) handles the rest.
 
-Conda envs used in real mode: `wes` (bwa, gatk4, picard, samtools, bcftools,
-fastp) for the WES branch; the base env for the scRNA branch.
+## Known limitations
+
+| Feature | Status |
+|---|---|
+| Somatic mutation calling (Mutect2, paired tumour/normal) | Planned — germline pipeline used as approximation |
+| Pseudotime / trajectory (PAGA, Monocle3, RNA velocity) | Planned — clustering + DE used as proxy |
+| Cell–cell communication (CellChat, NicheNet) | Planned |
+| Mutational signature analysis (SigProfiler) | Planned |
+| Copy number variation (CNV) | Planned |
+| Multi-sample integration across runs | Planned |

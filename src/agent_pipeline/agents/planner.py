@@ -116,6 +116,7 @@ def run(
     effort: str = "high",
     auto_approve: bool = True,
     max_iterations: int = MAX_ITERATIONS,
+    input_fn: "Callable[[], str] | None" = None,
 ) -> str:
     _model = model or (ANTHROPIC_MODEL_DEFAULT if provider_name == "anthropic" else OPENAI_MODEL_DEFAULT)
 
@@ -144,7 +145,6 @@ def run(
         f"Goal: {goal}\n\n"
         f"Primary data path: {data_path}\n\n"
         f"Checkpoint state for run '{run_id}':\n{resume_summary}\n\n"
-        f"Auto-proceed: yes — inspect the data, present the plan, then dispatch workers immediately.\n\n"
         "Begin by inspecting the data source."
     )
     provider.send_user_text(initial)
@@ -159,6 +159,14 @@ def run(
             print(result.text)
             final_text = result.text
         if result.stop_reason != "tool_use":
+            if input_fn is not None and result.text:
+                try:
+                    user_reply = input_fn()
+                except (EOFError, KeyboardInterrupt):
+                    user_reply = ""
+                if user_reply.strip():
+                    provider.send_user_text(user_reply)
+                    continue
             break
         tool_results = []
         for call in result.tool_calls:

@@ -13,6 +13,7 @@ files are opened in read-only/backed mode so only headers are touched.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -220,6 +221,27 @@ def _inspect_matrix_dir(path: Path) -> dict[str, Any]:
     }
 
 
+def _inspect_multimodal_cohort(path: Path) -> dict[str, Any]:
+    manifest = json.loads((path / "manifest.json").read_text())
+    samples = manifest.get("samples", [])
+    n_scrna = sum(1 for s in samples if s.get("scrna_path"))
+    n_wes = sum(1 for s in samples if s.get("wes_path"))
+    return {
+        "path": str(path),
+        "data_type": "multimodal_cohort",
+        "evidence": [
+            f"manifest.json found with {len(samples)} samples ({n_scrna} scRNA, {n_wes} WES)",
+            f"design={manifest.get('design')}  wes_scenario={manifest.get('wes_scenario', 'germline')}",
+        ],
+        "details": {
+            **manifest,
+            "n_samples": len(samples),
+            "n_scrna": n_scrna,
+            "n_wes": n_wes,
+        },
+    }
+
+
 def inspect(path: str) -> dict[str, Any]:
     """Classify a data path as DNA-exome fastq, scRNA fastq, scRNA count matrix, etc."""
     p = resolve_path(path)
@@ -227,6 +249,8 @@ def inspect(path: str) -> dict[str, Any]:
         return {"path": str(p), "data_type": "missing", "evidence": [f"path does not exist: {p}"]}
 
     if p.is_dir():
+        if (p / "manifest.json").exists():
+            return _inspect_multimodal_cohort(p)
         if any(p.glob("*.zip")):
             return _inspect_zip_dir(p)
         return _inspect_matrix_dir(p)

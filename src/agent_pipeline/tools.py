@@ -30,11 +30,11 @@ TOOLS: list[dict[str, Any]] = [
         "name": "inspect_data_source",
         "description": (
             "Classify a data path as DNA-exome fastq archive, scRNA fastq archive, scRNA count matrix "
-            "(.h5), scRNA AnnData (.h5ad), or unknown -- WITHOUT extracting any archive. Always call this "
-            "before deciding which pipeline branch (WES: qc/alignment/mutation_calling, or scRNA: "
-            "cell_annotation/clustering/differential_expression/gsea) applies to a given input. "
+            "(.h5), scRNA AnnData (.h5ad), multimodal_cohort (directory with manifest.json describing "
+            "per-sample scRNA + WES paths), or unknown -- WITHOUT extracting any archive. Always call this "
+            "before deciding which pipeline branch applies. "
             "Returns a data_type, supporting evidence, and details (e.g. n_cells/n_genes for matrices, "
-            "archive size and peeked read length for fastq)."
+            "archive size and peeked read length for fastq, full sample manifest for multimodal_cohort)."
         ),
         "input_schema": {
             "type": "object",

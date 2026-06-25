@@ -133,9 +133,8 @@ After presenting the plan, ask:
    (e.g. change the scenario, specify group labels, restrict to certain
    samples, or switch a step to real mode)?"
 
-In interactive (GUI) mode, stop here and wait for the user to confirm or
-adjust. In CLI mode ("Auto-proceed: yes" in the initial message), proceed
-immediately without waiting.
+Always stop here and wait for explicit user confirmation before dispatching
+any workers. Never proceed automatically, even in CLI mode.
 
 ════════════════════════════════════════════════════════
 STEP 5 — DISPATCH
@@ -147,6 +146,8 @@ After confirmation, call `dispatch_worker` for each sample. Always set the
 Branch routing:
   dna_exome_fastq_archive                               → branch="wes"
   scrna_count_matrix / scrna_h5ad / scrna_matrix_directory → branch="scrna"
+  multimodal_cohort  → read the embedded manifest (in inspect result details.samples);
+                        dispatch both scrna and wes workers for every sample — see pattern below
   scrna_fastq_archive  → report that CellRanger is not installed; do not dispatch
   unknown* / missing   → report explicitly; do not guess a branch
 
@@ -191,6 +192,52 @@ Dispatch patterns by scenario:
     dispatch_worker(branch="wes",   sample_id=..., scenario="somatic", ...)
     dispatch_worker(branch="scrna", sample_id=..., scenario="multi_group",
                     comparison="Correlate FLT3/NPM1 mutation status with scRNA cluster composition")
+
+  multimodal_cohort  (directory with manifest.json)
+    The inspect result's details contain the full manifest. Do NOT re-inspect
+    individual sample paths — use the manifest fields directly.
+
+    Check details.wes_scenario (defaults to "germline" if absent):
+
+    ── wes_scenario = "germline"  (e.g. Kang 2018 case-control demo) ──────────
+    For each sample in details.samples:
+      dispatch_worker(branch="scrna",
+                      sample_id=<sample_id>,
+                      input_path=<scrna_path>,
+                      n_cells=<n_cells>,
+                      scenario=<details.scrna_scenario or "multi_group">,
+                      groups=<details.groups or ["case","control"]>,
+                      group_column=<details.group_column>,
+                      comparison=<details.comparison>)
+      dispatch_worker(branch="wes",
+                      sample_id=<sample_id>,
+                      input_path=<wes_path>,
+                      scenario="germline")
+
+    ── wes_scenario = "somatic"  (e.g. tumor/normal paired OC cohort) ─────────
+    Dispatch ONE somatic WES worker using the tumor sample and the manifest's
+    paired_normal_id / paired_normal_path.  Dispatch separate scRNA workers
+    for each sample.
+
+    tumor_sample = the sample in details.samples where wes_role == "tumor"
+
+      dispatch_worker(branch="wes",
+                      sample_id=<tumor_sample.sample_id>,
+                      input_path=<tumor_sample.wes_path>,
+                      scenario="somatic",
+                      paired_normal_id=<details.paired_normal_id>,
+                      paired_normal_path=<details.paired_normal_path>,
+                      comparison=<details.comparison>)
+
+    For each sample in details.samples:
+      dispatch_worker(branch="scrna",
+                      sample_id=<sample_id>,
+                      input_path=<scrna_path>,
+                      n_cells=<n_cells>,
+                      scenario=<details.scrna_scenario or "multi_group">,
+                      groups=<details.groups or ["tumor","normal"]>,
+                      group_column=<details.group_column>,
+                      comparison=<details.comparison>)
 
 Use `read_checkpoint` before dispatching to skip already-completed samples.
 
