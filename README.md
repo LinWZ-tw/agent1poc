@@ -62,9 +62,9 @@ python run_pipeline.py \
   --goal "Case-control: IFN-β stimulated (case) vs unstimulated (control) PBMCs, 2 donors per group"
 
 # When done, open the report
-open result/kang-demo/report/report.html          # macOS
-xdg-open result/kang-demo/report/report.html      # Linux
-# or just navigate to result/kang-demo/report/ in your file browser
+open result/.../report/report.html          # macOS
+xdg-open result/.../report/report.html      # Linux
+# or just navigate to result/.../report/ in your file browser
 ```
 
 **The CLI is fully interactive.** The agent pauses at each decision point and
