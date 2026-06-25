@@ -47,13 +47,13 @@ def load_state(run_id: str) -> dict[str, Any]:
     path = state_path(run_id)
     if not path.exists():
         return {"run_id": run_id, "created_at": _now(), "steps": []}
-    with path.open() as f:
+    with path.open(encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_state(run_id: str, state: dict[str, Any]) -> None:
     with _lock:
-        state_path(run_id).write_text(json.dumps(state, indent=2, default=str))
+        state_path(run_id).write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
 
 
 def record_step(
@@ -85,14 +85,14 @@ def record_step(
             "timestamp": _now(),
         }
         state["steps"].append(record)
-        state_path(run_id).write_text(json.dumps(state, indent=2, default=str))
+        state_path(run_id).write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
         return record
 
 
 def append_log(run_id: str, entry: dict[str, Any]) -> None:
     entry = {"timestamp": _now(), **entry}
     with _lock:
-        with log_path(run_id).open("a") as f:
+        with log_path(run_id).open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, default=str) + "\n")
 
 

@@ -355,8 +355,8 @@ def run(
 
     md_path = rdir / "report.md"
     html_path = rdir / "report.html"
-    md_path.write_text(report_text)
-    html_path.write_text(_build_html(report_text, run_id, figure_paths, rdir))
+    md_path.write_text(report_text, encoding="utf-8")
+    html_path.write_text(_build_html(report_text, run_id, figure_paths, rdir), encoding="utf-8")
 
     state.append_log(run_id, {"event": "reporter_end", "report_md": str(md_path)})
     _emit(type="system", text=f"Reporter finished — report.html written to {rdir}", agent=_LABEL)

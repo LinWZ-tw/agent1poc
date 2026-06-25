@@ -478,10 +478,10 @@ def export_workflow(run_id: str) -> dict[str, str]:
     snk_path  = rdir / "Snakefile"
     meth_path = rdir / "methods.md"
 
-    sh_path.write_text(_build_shell_script(run_id, done))
+    sh_path.write_text(_build_shell_script(run_id, done), encoding="utf-8")
     sh_path.chmod(0o755)
-    snk_path.write_text(_build_snakefile(run_id, done))
-    meth_path.write_text(_build_methods(run_id, done))
+    snk_path.write_text(_build_snakefile(run_id, done), encoding="utf-8")
+    meth_path.write_text(_build_methods(run_id, done), encoding="utf-8")
 
     return {
         "reproduce_sh":         str(sh_path),
