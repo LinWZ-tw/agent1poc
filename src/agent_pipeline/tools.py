@@ -29,12 +29,14 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "inspect_data_source",
         "description": (
-            "Classify a data path as DNA-exome fastq archive, scRNA fastq archive, scRNA count matrix "
-            "(.h5), scRNA AnnData (.h5ad), multimodal_cohort (directory with manifest.json describing "
-            "per-sample scRNA + WES paths), or unknown -- WITHOUT extracting any archive. Always call this "
-            "before deciding which pipeline branch applies. "
-            "Returns a data_type, supporting evidence, and details (e.g. n_cells/n_genes for matrices, "
-            "archive size and peeked read length for fastq, full sample manifest for multimodal_cohort)."
+            "Classify a data path without extracting any archive. Possible data_type values: "
+            "dna_exome_fastq_archive (zipped WES FASTQ), dna_exome_fastq_directory (raw .fastq.gz WES files), "
+            "scrna_fastq_archive / scrna_fastq_directory (raw scRNA FASTQ — CellRanger not installed), "
+            "scrna_count_matrix (.h5), scrna_h5ad (.h5ad), scrna_matrix_directory, "
+            "multimodal_cohort (directory with manifest.json). "
+            "Always call before deciding the pipeline branch. "
+            "Returns data_type, evidence, and details (n_cells/n_genes, archive size, read length, "
+            "sample list with locate_fastq_pairs hint for fastq directories)."
         ),
         "input_schema": {
             "type": "object",
@@ -164,8 +166,8 @@ _DISPATCH_TOOLS: list[dict[str, Any]] = [
         "name": "dispatch_worker",
         "description": (
             "Dispatch a pipeline branch to the appropriate worker agent (Layer 2). "
-            "Use branch='wes' for dna_exome_fastq_archive data; branch='scrna' for "
-            "scrna_count_matrix / scrna_h5ad / scrna_matrix_directory data. "
+            "Use branch='wes' for dna_exome_fastq_archive or dna_exome_fastq_directory data; "
+            "branch='scrna' for scrna_count_matrix / scrna_h5ad / scrna_matrix_directory data. "
             "The worker runs all steps in its branch and returns a findings summary. "
             "Call once per sample. Always call inspect_data_source first to confirm the branch."
         ),

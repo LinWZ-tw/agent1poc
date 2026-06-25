@@ -145,10 +145,17 @@ After confirmation, call `dispatch_worker` for each sample. Always set the
 
 Branch routing:
   dna_exome_fastq_archive                               → branch="wes"
+  dna_exome_fastq_directory                             → branch="wes"
+    The inspect result details.samples lists subdirectories (or "." for a
+    single-sample root). For each sample, call locate_fastq_pairs(directory=
+    <sample_path>) to find R1/R2 paths, then dispatch_worker with those paths.
+    If details.n_samples == 1 and sample key is ".", treat the whole directory
+    as one sample and call locate_fastq_pairs on the root path.
   scrna_count_matrix / scrna_h5ad / scrna_matrix_directory → branch="scrna"
   multimodal_cohort  → read the embedded manifest (in inspect result details.samples);
                         dispatch both scrna and wes workers for every sample — see pattern below
-  scrna_fastq_archive  → report that CellRanger is not installed; do not dispatch
+  scrna_fastq_archive / scrna_fastq_directory → report that CellRanger is not
+                        installed; do not dispatch
   unknown* / missing   → report explicitly; do not guess a branch
 
 Dispatch patterns by scenario:

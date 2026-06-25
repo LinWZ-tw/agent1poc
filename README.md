@@ -384,11 +384,15 @@ the provider automatically retries with the next model in its fallback list.
 | Input | Detected as |
 |---|---|
 | Directory containing `manifest.json` (per-sample scRNA + WES paths) | `multimodal_cohort` |
+| Directory of raw `.fastq.gz` / `.fq.gz` files (WES) | `dna_exome_fastq_directory` |
+| Directory of raw `.fastq.gz` / `.fq.gz` files (scRNA) | `scrna_fastq_directory` |
 | Directory of fastq-in-zip archives with `list_part_*` / `*.md5` manifests | `dna_exome_fastq_archive` or `scrna_fastq_archive` |
 | Single `.h5` file (CellRanger output) | `scrna_count_matrix` |
 | Single `.h5ad` file (AnnData) | `scrna_h5ad` |
 | Directory containing multiple `.h5` or `.h5ad` files | `scrna_matrix_directory` |
 | Anything else | `unknown*` — reported, not guessed |
+
+Detection classifies by file content (read length peek, naming patterns), not by directory name. For raw FASTQ directories the agent automatically calls `locate_fastq_pairs` to find R1/R2 pairs before dispatching the WES worker.
 
 The `manifest.json` format (used by the multimodal demo):
 

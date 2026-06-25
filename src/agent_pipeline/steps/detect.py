@@ -221,6 +221,110 @@ def _inspect_matrix_dir(path: Path) -> dict[str, Any]:
     }
 
 
+def _peek_fastq_file(fastq_path: Path, n_bytes: int = 4000) -> str:
+    """Read the first n_bytes of a .fastq.gz file without fully decompressing it."""
+    try:
+        import gzip
+        with gzip.open(fastq_path, "rt", errors="replace") as f:
+            return f.read(n_bytes)
+    except Exception:
+        return ""
+
+
+def _classify_fastq_dir(fastq_files: list[Path], path: Path) -> tuple[str, list[str]]:
+    """Classify a directory of raw .fastq.gz files as WES or scRNA.
+
+    Key signals (in priority order):
+      1. Presence of _I1_/_I2_ index reads → definitive 10x scRNA
+      2. Read length peek:  >=75bp → WES/genomic,  <=30bp → scRNA barcode
+      3. Path contains 'EXOME' or 'WES' → WES
+    Note: _R1_001 / _R2_001 naming alone is ambiguous (used in both WES and scRNA).
+    """
+    names = [f.name for f in fastq_files]
+    text_blob = "\n".join(str(f) for f in fastq_files)
+
+    # Index reads are unique to 10x scRNA libraries (not present in WES)
+    _INDEX_RE = re.compile(r"_(I1|I2)_001\.f(ast)?q", re.IGNORECASE)
+    has_index_reads = any(_INDEX_RE.search(n) for n in names)
+    is_exome_named = bool(_EXOME_RE.search(text_blob))
+
+    evidence: list[str] = []
+    if has_index_reads:
+        evidence.append("I1/I2 index read files present — definitive 10x scRNA library")
+    if is_exome_named:
+        evidence.append("file paths contain 'EXOME' or 'WES'")
+
+    # Peek R1 (barcode read for scRNA, genomic for WES)
+    r1_candidate = next((f for f in fastq_files if re.search(r"_R1[_.]", f.name, re.IGNORECASE)), None)
+    peek_file = r1_candidate or fastq_files[0]
+    peek_text = _peek_fastq_file(peek_file)
+    read_lengths = []
+    lines = peek_text.splitlines()
+    for i in range(1, len(lines), 4):
+        if i < len(lines) and lines[i] and not lines[i].startswith("@"):
+            read_lengths.append(len(lines[i]))
+    avg_len = sum(read_lengths) / len(read_lengths) if read_lengths else None
+    if avg_len is not None:
+        evidence.append(f"peeked read length ~{avg_len:.0f}bp from {peek_file.name}")
+        if avg_len <= 30:
+            evidence.append("short read consistent with 10x barcode+UMI (scRNA R1)")
+        elif avg_len >= 75:
+            evidence.append("long read consistent with genomic sequencing (WES/WGS)")
+
+    # Decision tree
+    if has_index_reads:
+        return "scrna_fastq_directory", evidence
+    if is_exome_named:
+        return "dna_exome_fastq_directory", evidence
+    if avg_len is not None:
+        if avg_len >= 75:
+            return "dna_exome_fastq_directory", evidence
+        if avg_len <= 30:
+            return "scrna_fastq_directory", evidence
+    return "unknown_fastq_directory", evidence
+
+
+def _inspect_fastq_dir(path: Path) -> dict[str, Any]:
+    """A directory (or tree) of raw .fastq.gz files — not zipped, not archived."""
+    # Collect all fastq.gz files up to 2 levels deep
+    fastq_files = sorted(path.glob("*.fastq.gz")) + sorted(path.glob("*.fq.gz"))
+    if not fastq_files:
+        fastq_files = sorted(path.glob("*/*.fastq.gz")) + sorted(path.glob("*/*.fq.gz"))
+    if not fastq_files:
+        fastq_files = sorted(path.glob("**/*.fastq.gz")) + sorted(path.glob("**/*.fq.gz"))
+
+    if not fastq_files:
+        return {
+            "path": str(path),
+            "data_type": "unknown",
+            "evidence": ["directory has no .fastq.gz / .fq.gz files"],
+        }
+
+    total_size = sum(f.stat().st_size for f in fastq_files)
+    data_type, evidence = _classify_fastq_dir(fastq_files, path)
+
+    # Group files by sample subdirectory (or treat root as single sample)
+    samples: dict[str, list[str]] = {}
+    for f in fastq_files:
+        # Key: subdirectory name relative to path, or "." if in root
+        rel = f.relative_to(path)
+        sample_key = str(rel.parts[0]) if len(rel.parts) > 1 else "."
+        samples.setdefault(sample_key, []).append(f.name)
+
+    return {
+        "path": str(path),
+        "data_type": data_type,
+        "evidence": evidence,
+        "details": {
+            "n_fastq_files": len(fastq_files),
+            "total_compressed_gb": round(total_size / 1e9, 2),
+            "n_samples": len(samples),
+            "samples": {k: v[:6] for k, v in list(samples.items())[:10]},
+            "use_locate_fastq_pairs": True,
+        },
+    }
+
+
 def _inspect_multimodal_cohort(path: Path) -> dict[str, Any]:
     manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
     samples = manifest.get("samples", [])
@@ -253,6 +357,9 @@ def inspect(path: str) -> dict[str, Any]:
             return _inspect_multimodal_cohort(p)
         if any(p.glob("*.zip")):
             return _inspect_zip_dir(p)
+        if any(p.glob("*.fastq.gz")) or any(p.glob("*.fq.gz")) \
+                or any(p.glob("*/*.fastq.gz")) or any(p.glob("*/*.fq.gz")):
+            return _inspect_fastq_dir(p)
         return _inspect_matrix_dir(p)
     if p.suffix == ".h5":
         return _inspect_h5(p)
