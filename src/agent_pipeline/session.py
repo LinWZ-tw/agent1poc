@@ -18,6 +18,7 @@ import json
 import queue
 import threading
 import time
+import traceback
 from typing import Any
 
 from .prompts.planner import SYSTEM_PROMPT
@@ -97,7 +98,10 @@ class AgentSession:
                 self._run_until_idle()
                 self.status = "waiting_for_user"
             except Exception as exc:  # noqa: BLE001 - surfaced to the GUI, thread stays alive
-                self._emit(type="error", text=f"{type(exc).__name__}: {exc}")
+                tb = traceback.format_exc()
+                import sys
+                print(tb, file=sys.stderr)
+                self._emit(type="error", text=f"{type(exc).__name__}: {exc}\n\n{tb}")
                 self.status = "error"
 
     def _run_until_idle(self) -> None:
@@ -119,7 +123,8 @@ class AgentSession:
                     output = self._dispatch(self.run_id, call["name"], call["input"], self.auto_approve)
                     is_error = bool(isinstance(output, dict) and output.get("error"))
                 except Exception as exc:  # noqa: BLE001 - surfaced back to the model, not raised
-                    output = {"error": f"{type(exc).__name__}: {exc}"}
+                    tb = traceback.format_exc()
+                    output = {"error": f"{type(exc).__name__}: {exc}", "traceback": tb}
                     is_error = True
                 self._emit(type="tool_result", name=call["name"], output=output, is_error=is_error)
                 tool_results.append(
