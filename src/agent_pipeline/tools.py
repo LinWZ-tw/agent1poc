@@ -172,10 +172,46 @@ _DISPATCH_TOOLS: list[dict[str, Any]] = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "branch": {"type": "string", "enum": ["wes", "scrna"]},
+                "branch":    {"type": "string", "enum": ["wes", "scrna"]},
                 "sample_id": {"type": "string", "description": "Identifier for this sample."},
                 "input_path": {"type": "string", "description": "Path to the sample data file or directory."},
-                "n_cells": {"type": "integer", "description": "Optional cell count hint for scRNA steps (from inspect_data_source)."},
+                "n_cells":   {"type": "integer", "description": "Optional cell count hint for scRNA (from inspect_data_source)."},
+                "scenario":  {
+                    "type": "string",
+                    "enum": ["within_sample", "multi_group", "trajectory", "tme", "germline", "somatic", "multimodal"],
+                    "description": (
+                        "Analysis scenario: "
+                        "'within_sample' — single group, DE between clusters; "
+                        "'multi_group' — case/control or treatment groups, DE between groups; "
+                        "'trajectory' — pseudotime / differentiation path; "
+                        "'tme' — tumour microenvironment, immune infiltration; "
+                        "'germline' — germline variant calling (WES); "
+                        "'somatic' — paired tumour/normal somatic mutation calling (WES); "
+                        "'multimodal' — combined WES + scRNA. "
+                        "Defaults to 'within_sample' (scRNA) or 'germline' (WES) if omitted."
+                    ),
+                },
+                "groups": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "For multi_group / tme / somatic: list of group labels (e.g. ['tumor','normal'] or ['pre_treatment','post_treatment']).",
+                },
+                "group_column": {
+                    "type": "string",
+                    "description": "Metadata column that encodes group membership (e.g. 'condition', 'treatment', 'diagnosis').",
+                },
+                "comparison": {
+                    "type": "string",
+                    "description": "Free-text description of the comparison (e.g. 'AML blast vs normal HSC, 3 replicates per group').",
+                },
+                "paired_normal_id": {
+                    "type": "string",
+                    "description": "For somatic WES: sample_id of the matched normal sample.",
+                },
+                "paired_normal_path": {
+                    "type": "string",
+                    "description": "For somatic WES: input_path of the matched normal sample.",
+                },
             },
             "required": ["branch", "sample_id", "input_path"],
         },

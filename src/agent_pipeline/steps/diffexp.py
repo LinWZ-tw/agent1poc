@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import seeded_random
+from . import TOOL_VERSIONS, compute_seed, seeded_random
 from .detect import resolve_path
 
 _GENE_POOL = [
@@ -16,6 +16,7 @@ _GENE_POOL = [
 
 
 def _mock(sample_id: str, groups: list[str] | None) -> dict[str, Any]:
+    _orig_groups = groups
     rng = seeded_random("diffexp", sample_id, str(groups))
     groups = groups or [f"leiden_{i}" for i in range(rng.randint(6, 10))]
     top_genes = {}
@@ -25,7 +26,18 @@ def _mock(sample_id: str, groups: list[str] | None) -> dict[str, Any]:
             {"gene": gene, "logfoldchange": round(rng.uniform(0.5, 4.0), 2), "pval_adj": round(rng.uniform(1e-50, 1e-3), 6)}
             for gene in genes
         ]
-    return {"sample_id": sample_id, "groupby": "leiden_or_cell_type", "groups": groups, "top_de_genes": top_genes}
+    return {
+        "sample_id": sample_id,
+        "groupby": "leiden_or_cell_type",
+        "groups": groups,
+        "top_de_genes": top_genes,
+        "_provenance": {
+            "tool": "scanpy rank_genes_groups",
+            "version": TOOL_VERSIONS["scanpy"],
+            "parameters": {"method": "wilcoxon"},
+            "random_seed": compute_seed("diffexp", sample_id, str(_orig_groups)),
+        },
+    }
 
 
 def _real(sample_id: str, input_path: str, group_key: str, method: str) -> dict[str, Any]:
@@ -43,7 +55,18 @@ def _real(sample_id: str, input_path: str, group_key: str, method: str) -> dict[
     for group in adata.obs[group_key].unique():
         df = sc.get.rank_genes_groups_df(adata, group=str(group)).head(10)
         top_genes[str(group)] = df.to_dict(orient="records")
-    return {"sample_id": sample_id, "groupby": group_key, "method": method, "top_de_genes": top_genes}
+    return {
+        "sample_id": sample_id,
+        "groupby": group_key,
+        "method": method,
+        "top_de_genes": top_genes,
+        "_provenance": {
+            "tool": "scanpy rank_genes_groups",
+            "version": TOOL_VERSIONS["scanpy"],
+            "parameters": {"method": method, "group_key": group_key},
+            "random_seed": None,
+        },
+    }
 
 
 def run(*, sample_id: str, input_path: str, mode: str = "mock", **kwargs: Any) -> dict[str, Any]:

@@ -50,6 +50,15 @@ For each sample:
 Bullet list of what would be needed to run this pipeline in real mode \
 (archive extraction, specific samples to select, reference panel, etc.)
 
+## Reproducibility
+Note that the following files have been auto-generated alongside this report:
+- `reproduce.sh` — exact shell commands (or real-mode equivalents) for every step
+- `Snakefile` — Snakemake workflow to re-run the pipeline end-to-end
+- `methods.md` — Methods section draft ready for inclusion in a manuscript
+
+All three files are in `result/<run_id>/`. Tool versions and random seeds used \
+are recorded in `result/<run_id>/state.json` under each step's `provenance` field.
+
 ---
 
 Format notes:

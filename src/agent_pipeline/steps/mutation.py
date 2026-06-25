@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import REPO_ROOT
-from . import conda_run, seeded_random
+from . import TOOL_VERSIONS, conda_run, seeded_random
 from .alignment import DEFAULT_REFERENCE
 from .detect import resolve_path
 
@@ -44,6 +44,16 @@ def _mock(sample_id: str, input_path: str) -> dict[str, Any]:
         "n_pass_variants": int(n_pass),
         "notable_oc_driver_variants": top_variants,
         "tp53_mutated": "TP53" in hit_genes,
+        "_provenance": {
+            "tool": "GATK4 HaplotypeCaller",
+            "version": TOOL_VERSIONS["gatk"],
+            "parameters": {
+                "pipeline": "MarkDuplicates → BaseRecalibrator → ApplyBQSR → HaplotypeCaller",
+                "known_sites": "dbSNP build 155 (GCF_000001405.40)",
+            },
+            "random_seed": None,
+            "reference": "GRCh38 (mock)",
+        },
     }
 
 
@@ -85,7 +95,21 @@ def _real(sample_id: str, bam_path: str, output_dir: str, reference: str | None,
         conda_run("wes", "gatk", "HaplotypeCaller", "-I", str(bqsr_bam), "-R", str(ref), "-O", str(vcf)),
         check=True, cwd=str(REPO_ROOT),
     )
-    return {"sample_id": sample_id, "vcf_path": str(vcf), "dedup_bam": str(dedup_bam)}
+    return {
+        "sample_id": sample_id,
+        "vcf_path": str(vcf),
+        "dedup_bam": str(dedup_bam),
+        "_provenance": {
+            "tool": "GATK4 HaplotypeCaller",
+            "version": TOOL_VERSIONS["gatk"],
+            "parameters": {
+                "pipeline": "MarkDuplicates → BaseRecalibrator → ApplyBQSR → HaplotypeCaller",
+                "known_sites": str(sites),
+            },
+            "random_seed": None,
+            "reference": str(ref),
+        },
+    }
 
 
 def run(*, sample_id: str, input_path: str, mode: str = "mock", **kwargs: Any) -> dict[str, Any]:

@@ -19,6 +19,10 @@ def run(
     run_id: str,
     sample_id: str,
     input_path: str,
+    scenario: str | None = None,
+    paired_normal_id: str | None = None,
+    paired_normal_path: str | None = None,
+    comparison: str | None = None,
     provider_name: str = "anthropic",
     api_key: str = "",
     model: str | None = None,
@@ -40,12 +44,24 @@ def run(
         tools=WORKER_TOOLS,
     )
 
+    scenario_lines: list[str] = []
+    if scenario:
+        scenario_lines.append(f"scenario: {scenario}")
+    if paired_normal_id:
+        scenario_lines.append(f"paired_normal_id: {paired_normal_id}")
+    if paired_normal_path:
+        scenario_lines.append(f"paired_normal_path: {paired_normal_path}")
+    if comparison:
+        scenario_lines.append(f"comparison: {comparison}")
+    scenario_hint = ("\n" + "\n".join(scenario_lines)) if scenario_lines else ""
+
     initial = (
         f"Run the WES pipeline branch.\n"
         f"run_id: {run_id}\n"
         f"sample_id: {sample_id}\n"
-        f"input_path: {input_path}\n\n"
-        f"Execute qc → alignment → mutation_calling in order. "
+        f"input_path: {input_path}"
+        f"{scenario_hint}\n\n"
+        f"Follow your system prompt's scenario-specific instructions. "
         f"Use mode='mock'. Check read_checkpoint first for any already-completed steps."
     )
     provider.send_user_text(initial)

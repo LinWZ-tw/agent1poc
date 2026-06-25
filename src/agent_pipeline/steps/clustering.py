@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import seeded_random
+from . import TOOL_VERSIONS, compute_seed, seeded_random
 from .detect import resolve_path
 
 
@@ -21,6 +21,12 @@ def _mock(sample_id: str, input_path: str, n_cells: int | None) -> dict[str, Any
         "n_clusters": n_clusters,
         "cluster_sizes": {f"leiden_{i}": s for i, s in enumerate(sizes)},
         "integration_method": "none (single sample, mock mode does not model batch integration)",
+        "_provenance": {
+            "tool": "scanpy + leidenalg",
+            "version": f"scanpy {TOOL_VERSIONS['scanpy']}, leidenalg {TOOL_VERSIONS['leidenalg']}",
+            "parameters": {"n_pcs": 30, "n_hvg": 2000, "resolution": 1.0},
+            "random_seed": compute_seed("clustering", sample_id, input_path),
+        },
     }
 
 
@@ -49,6 +55,9 @@ def _real(sample_id: str, input_path: str, batch_key: str | None, resolution: fl
 
     sc.tl.leiden(adata, resolution=resolution, key_added="leiden")
     sizes = adata.obs["leiden"].value_counts().to_dict()
+    tool_ver = f"scanpy {TOOL_VERSIONS['scanpy']}, leidenalg {TOOL_VERSIONS['leidenalg']}"
+    if integration_method == "harmony":
+        tool_ver += f", harmonypy {TOOL_VERSIONS['harmonypy']}"
     return {
         "sample_id": sample_id,
         "n_cells": int(adata.n_obs),
@@ -56,6 +65,12 @@ def _real(sample_id: str, input_path: str, batch_key: str | None, resolution: fl
         "cluster_sizes": {f"leiden_{k}": int(v) for k, v in sizes.items()},
         "integration_method": integration_method,
         "resolution": resolution,
+        "_provenance": {
+            "tool": "scanpy + harmonypy + leidenalg" if integration_method == "harmony" else "scanpy + leidenalg",
+            "version": tool_ver,
+            "parameters": {"n_pcs": 30, "n_hvg": 2000, "resolution": resolution, "batch_key": batch_key},
+            "random_seed": None,
+        },
     }
 
 

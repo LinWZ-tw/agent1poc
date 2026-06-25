@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import seeded_random
+from . import TOOL_VERSIONS, compute_seed, seeded_random
 from .detect import resolve_path
 
 DEFAULT_GENE_SETS = "data/RefGenome/MSigDB_Hallmark_2020.gmt"
@@ -42,7 +42,18 @@ def _mock(sample_id: str, group: str | None) -> dict[str, Any]:
         for p in pathways
     ]
     results.sort(key=lambda r: abs(r["nes"]), reverse=True)
-    return {"sample_id": sample_id, "group": group, "gene_sets": "MSigDB_Hallmark_2020 (mock)", "enriched_pathways": results}
+    return {
+        "sample_id": sample_id,
+        "group": group,
+        "gene_sets": "MSigDB_Hallmark_2020 (mock)",
+        "enriched_pathways": results,
+        "_provenance": {
+            "tool": "gseapy prerank",
+            "version": TOOL_VERSIONS["gseapy"],
+            "parameters": {"gene_sets": "MSigDB_Hallmark_2020", "permutation_num": 100, "min_size": 5, "max_size": 1000, "seed": 0},
+            "random_seed": compute_seed("gsea", sample_id, str(group)),
+        },
+    }
 
 
 def _real(sample_id: str, ranked_genes: dict[str, float], gene_sets: str, group: str | None) -> dict[str, Any]:
@@ -56,7 +67,18 @@ def _real(sample_id: str, ranked_genes: dict[str, float], gene_sets: str, group:
     pre_res = gp.prerank(rnk=rnk, gene_sets=str(gmt_path), min_size=5, max_size=1000, permutation_num=100, seed=0)
     df = pre_res.res2d.sort_values("NES", key=abs, ascending=False).head(15)
     enriched = df.to_dict(orient="records")
-    return {"sample_id": sample_id, "group": group, "gene_sets": str(gmt_path), "enriched_pathways": enriched}
+    return {
+        "sample_id": sample_id,
+        "group": group,
+        "gene_sets": str(gmt_path),
+        "enriched_pathways": enriched,
+        "_provenance": {
+            "tool": "gseapy prerank",
+            "version": TOOL_VERSIONS["gseapy"],
+            "parameters": {"gene_sets": str(gmt_path), "permutation_num": 100, "min_size": 5, "max_size": 1000, "seed": 0},
+            "random_seed": None,
+        },
+    }
 
 
 def run(*, sample_id: str, mode: str = "mock", **kwargs: Any) -> dict[str, Any]:

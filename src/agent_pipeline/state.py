@@ -70,6 +70,9 @@ def record_step(
     """Append or update a step record and persist it. Thread-safe."""
     with _lock:
         state = load_state(run_id)
+        provenance = None
+        if isinstance(outputs, dict):
+            provenance = outputs.pop("_provenance", None)
         record = {
             "step": step,
             "status": status,
@@ -77,6 +80,7 @@ def record_step(
             "job_id": job_id,
             "inputs": inputs,
             "outputs": outputs,
+            "provenance": provenance,
             "error": error,
             "timestamp": _now(),
         }

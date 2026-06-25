@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import seeded_random
+from . import TOOL_VERSIONS, compute_seed, seeded_random
 from .detect import resolve_path
 
 MARKER_SETS = {
@@ -39,6 +39,16 @@ def _mock(sample_id: str, input_path: str, n_cells: int | None) -> dict[str, Any
         "marker_sets_used": MARKER_SETS,
         "cell_type_proportions": proportions,
         "cell_type_counts": counts,
+        "_provenance": {
+            "tool": "scanpy score_genes",
+            "version": TOOL_VERSIONS["scanpy"],
+            "parameters": {
+                "n_cell_types": len(MARKER_SETS),
+                "cell_types": list(MARKER_SETS.keys()),
+                "method": "score_genes → argmax",
+            },
+            "random_seed": compute_seed("annotation", sample_id, input_path),
+        },
     }
 
 
@@ -76,6 +86,16 @@ def _real(sample_id: str, input_path: str) -> dict[str, Any]:
         "n_genes_used_for_scoring": int(score_df.notna().any(axis=0).sum()),
         "cell_type_counts": {k: int(v) for k, v in counts.items()},
         "cell_type_proportions": proportions,
+        "_provenance": {
+            "tool": "scanpy score_genes",
+            "version": TOOL_VERSIONS["scanpy"],
+            "parameters": {
+                "n_cell_types": len(MARKER_SETS),
+                "cell_types": list(MARKER_SETS.keys()),
+                "method": "score_genes → argmax",
+            },
+            "random_seed": None,
+        },
     }
 
 

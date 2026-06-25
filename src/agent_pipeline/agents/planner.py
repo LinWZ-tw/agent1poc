@@ -38,6 +38,12 @@ def make_dispatch(
         sample_id = tool_input.get("sample_id", "unknown")
         input_path = tool_input.get("input_path", "")
         n_cells = tool_input.get("n_cells")
+        scenario = tool_input.get("scenario")
+        groups = tool_input.get("groups")
+        group_column = tool_input.get("group_column")
+        comparison = tool_input.get("comparison")
+        paired_normal_id = tool_input.get("paired_normal_id")
+        paired_normal_path = tool_input.get("paired_normal_path")
 
         if branch == "wes":
             from . import wes_agent
@@ -45,6 +51,10 @@ def make_dispatch(
                 run_id=run_id_,
                 sample_id=sample_id,
                 input_path=input_path,
+                scenario=scenario,
+                paired_normal_id=paired_normal_id,
+                paired_normal_path=paired_normal_path,
+                comparison=comparison,
                 provider_name=provider_name,
                 api_key=api_key,
                 model=model,
@@ -62,6 +72,10 @@ def make_dispatch(
                 sample_id=sample_id,
                 input_path=input_path,
                 n_cells=n_cells,
+                scenario=scenario,
+                groups=groups,
+                group_column=group_column,
+                comparison=comparison,
                 provider_name=provider_name,
                 api_key=api_key,
                 model=model,

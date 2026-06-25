@@ -20,6 +20,10 @@ def run(
     sample_id: str,
     input_path: str,
     n_cells: int | None = None,
+    scenario: str | None = None,
+    groups: list[str] | None = None,
+    group_column: str | None = None,
+    comparison: str | None = None,
     provider_name: str = "anthropic",
     api_key: str = "",
     model: str | None = None,
@@ -42,14 +46,25 @@ def run(
     )
 
     cells_hint = f"\nn_cells hint (from inspect): {n_cells}" if n_cells is not None else ""
+    scenario_lines: list[str] = []
+    if scenario:
+        scenario_lines.append(f"scenario: {scenario}")
+    if groups:
+        scenario_lines.append(f"groups: {', '.join(groups)}")
+    if group_column:
+        scenario_lines.append(f"group_column: {group_column}")
+    if comparison:
+        scenario_lines.append(f"comparison: {comparison}")
+    scenario_hint = ("\n" + "\n".join(scenario_lines)) if scenario_lines else ""
+
     initial = (
         f"Run the scRNA pipeline branch.\n"
         f"run_id: {run_id}\n"
         f"sample_id: {sample_id}\n"
         f"input_path: {input_path}"
-        f"{cells_hint}\n\n"
-        f"Execute cell_annotation → clustering → differential_expression → gsea in order. "
-        f"Chain step outputs as described in your instructions. "
+        f"{cells_hint}"
+        f"{scenario_hint}\n\n"
+        f"Follow your system prompt's scenario-specific instructions. "
         f"Use mode='mock'. Check read_checkpoint first for any already-completed steps."
     )
     provider.send_user_text(initial)

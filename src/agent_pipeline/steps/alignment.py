@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import REPO_ROOT
-from . import conda_run, seeded_random
+from . import TOOL_VERSIONS, conda_run, seeded_random
 from .detect import resolve_path
 
 DEFAULT_REFERENCE = "data/RefGenome/GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
@@ -33,6 +33,13 @@ def _mock(sample_id: str, input_path: str) -> dict[str, Any]:
         "pct_target_bases_at_20x": pct_target_bases_20x,
         "insert_size_mean_bp": insert_size_mean,
         "alignment_verdict": "pass" if pct_mapped > 95 and mean_target_coverage > 30 else "low_coverage",
+        "_provenance": {
+            "tool": "bwa mem + samtools sort",
+            "version": f"bwa {TOOL_VERSIONS['bwa']}, samtools {TOOL_VERSIONS['samtools']}",
+            "parameters": {"threads_bwa": 8, "threads_samtools": 4, "flags": "-M"},
+            "random_seed": None,
+            "reference": "GRCh38",
+        },
     }
 
 
@@ -52,7 +59,18 @@ def _real(sample_id: str, r1: str, r2: str, output_dir: str, reference: str | No
     with subprocess.Popen(bwa_cmd, stdout=subprocess.PIPE, cwd=str(REPO_ROOT)) as bwa_proc:
         subprocess.run(sort_cmd, stdin=bwa_proc.stdout, check=True, cwd=str(REPO_ROOT))
     subprocess.run(conda_run("wes", "samtools", "index", str(bam)), check=True, cwd=str(REPO_ROOT))
-    return {"sample_id": sample_id, "bam_path": str(bam), "reference": str(ref)}
+    return {
+        "sample_id": sample_id,
+        "bam_path": str(bam),
+        "reference": str(ref),
+        "_provenance": {
+            "tool": "bwa mem + samtools sort",
+            "version": f"bwa {TOOL_VERSIONS['bwa']}, samtools {TOOL_VERSIONS['samtools']}",
+            "parameters": {"threads_bwa": 8, "threads_samtools": 4, "flags": "-M"},
+            "random_seed": None,
+            "reference": str(ref),
+        },
+    }
 
 
 def run(*, sample_id: str, input_path: str, mode: str = "mock", **kwargs: Any) -> dict[str, Any]:

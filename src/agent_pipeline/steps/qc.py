@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import REPO_ROOT
-from . import conda_run, seeded_random
+from . import TOOL_VERSIONS, conda_run, seeded_random
 from .detect import resolve_path
 
 
@@ -34,6 +34,12 @@ def _mock(sample_id: str, input_path: str) -> dict[str, Any]:
         "adapter_contamination_pct": adapter_pct,
         "duplication_rate_pct": dup_pct,
         "qc_verdict": "pass" if pct_pass > 90 and q30 > 85 else "marginal",
+        "_provenance": {
+            "tool": "fastp",
+            "version": TOOL_VERSIONS["fastp"],
+            "parameters": {"thread": 8, "quality": 20, "min_length": 15},
+            "random_seed": None,
+        },
     }
 
 
@@ -58,7 +64,17 @@ def _real(sample_id: str, r1: str, r2: str, output_dir: str) -> dict[str, Any]:
         "--thread", "8",
     )
     subprocess.run(cmd, check=True, cwd=str(REPO_ROOT))
-    return {"sample_id": sample_id, "fastp_json_report": str(json_report), "command": " ".join(cmd)}
+    return {
+        "sample_id": sample_id,
+        "fastp_json_report": str(json_report),
+        "command": " ".join(cmd),
+        "_provenance": {
+            "tool": "fastp",
+            "version": TOOL_VERSIONS["fastp"],
+            "parameters": {"r1": r1, "r2": r2, "thread": 8},
+            "random_seed": None,
+        },
+    }
 
 
 def run(*, sample_id: str, input_path: str, mode: str = "mock", **kwargs: Any) -> dict[str, Any]:
