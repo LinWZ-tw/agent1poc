@@ -19,6 +19,13 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
+try:
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots as _plotly_subplots
+    _PLOTLY = True
+except ImportError:
+    _PLOTLY = False
+
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -32,6 +39,11 @@ def _save(fig: plt.Figure, path: Path) -> str:
     fig.savefig(path, dpi=100, bbox_inches="tight")
     plt.close(fig)
     return str(path)
+
+
+def _div(plotly_fig) -> str:
+    """Return an HTML div string for a Plotly figure (no bundled plotly.js)."""
+    return plotly_fig.to_html(full_html=False, include_plotlyjs=False)
 
 
 # ── scRNA figures ─────────────────────────────────────────────────────────────
@@ -222,6 +234,154 @@ def plot_wes_variants(sample_id: str, mutation: dict[str, Any], figures_dir: Pat
     return _save(fig, figures_dir / f"wes_variants_{sample_id}.png")
 
 
+# ── Plotly (interactive) counterparts ────────────────────────────────────────
+
+def _plotly_cell_type_composition(sample_id: str, annotation: dict[str, Any]):
+    proportions = annotation.get("cell_type_proportions", {})
+    if not proportions or not _PLOTLY:
+        return None
+    pairs = sorted(proportions.items(), key=lambda x: x[1], reverse=True)
+    cell_types, values = zip(*pairs)
+    fig = go.Figure(go.Bar(
+        x=list(values), y=list(cell_types), orientation="h",
+        text=[f"{v:.1%}" for v in values], textposition="outside",
+        marker_color="rgba(99,110,250,0.8)",
+    ))
+    fig.update_layout(
+        title=f"Cell Type Composition — {sample_id}",
+        xaxis_title="Proportion of cells",
+        yaxis=dict(autorange="reversed"),
+        height=max(300, len(cell_types) * 35 + 80),
+        margin=dict(l=10, r=70, t=50, b=40),
+    )
+    return fig
+
+
+def _plotly_umap(sample_id: str, clustering: dict[str, Any]):
+    cluster_sizes = clustering.get("cluster_sizes", {})
+    if not cluster_sizes or not _PLOTLY:
+        return None
+    rng = _rng(sample_id, "umap")
+    n_clusters = len(cluster_sizes)
+    centers = rng.uniform(-8, 8, (n_clusters, 2))
+    traces = []
+    for i, (cluster, n) in enumerate(cluster_sizes.items()):
+        n_pts = min(n, 400)
+        pts = rng.normal(centers[i], scale=0.85, size=(n_pts, 2))
+        traces.append(go.Scatter(
+            x=pts[:, 0].tolist(), y=pts[:, 1].tolist(),
+            mode="markers", marker=dict(size=4, opacity=0.6), name=cluster,
+        ))
+    fig = go.Figure(traces)
+    fig.update_layout(
+        title=f"UMAP — Leiden Clusters — {sample_id} (mock)",
+        xaxis_title="UMAP 1 (mock)", yaxis_title="UMAP 2 (mock)",
+        height=520,
+    )
+    return fig
+
+
+def _plotly_cluster_sizes(sample_id: str, clustering: dict[str, Any]):
+    sizes = clustering.get("cluster_sizes", {})
+    if not sizes or not _PLOTLY:
+        return None
+    clusters = list(sizes.keys())
+    counts = [sizes[c] for c in clusters]
+    fig = go.Figure(go.Bar(
+        x=clusters, y=counts, text=counts, textposition="outside",
+        marker_color="rgba(99,110,250,0.75)",
+    ))
+    fig.update_layout(
+        title=f"Cluster Sizes (Leiden) — {sample_id}",
+        xaxis_title="Cluster", yaxis_title="Cell count",
+        height=400,
+    )
+    return fig
+
+
+def _plotly_de_genes(sample_id: str, diffexp: dict[str, Any]):
+    top_de = diffexp.get("top_de_genes", {})
+    if not top_de or not _PLOTLY:
+        return None
+    cluster = max(top_de, key=lambda c: len(top_de[c]))
+    records = sorted(top_de[cluster], key=lambda g: abs(g["logfoldchange"]), reverse=True)[:10]
+    if not records:
+        return None
+    genes = [g["gene"] for g in records]
+    lfc = [g["logfoldchange"] for g in records]
+    colors = ["#e74c3c" if v > 0 else "#3498db" for v in lfc]
+    fig = go.Figure(go.Bar(
+        x=lfc, y=genes, orientation="h",
+        marker_color=colors,
+        text=[f"{v:+.2f}" for v in lfc], textposition="outside",
+    ))
+    fig.update_layout(
+        title=f"Top DE Genes — {cluster} — {sample_id}",
+        xaxis_title="Log2 Fold Change",
+        yaxis=dict(autorange="reversed"),
+        height=max(300, len(genes) * 35 + 80),
+        margin=dict(l=10, r=60, t=50, b=40),
+    )
+    return fig
+
+
+def _plotly_gsea(sample_id: str, gsea_result: dict[str, Any]):
+    pathways = gsea_result.get("enriched_pathways", [])
+    if not pathways or not _PLOTLY:
+        return None
+    top = sorted(pathways, key=lambda p: abs(p["nes"]), reverse=True)[:10]
+    top = sorted(top, key=lambda p: p["nes"])
+    names = [p["pathway"].replace("HALLMARK_", "").replace("_", " ").title() for p in top]
+    nes = [p["nes"] for p in top]
+    colors = ["#e74c3c" if v > 0 else "#3498db" for v in nes]
+    fig = go.Figure(go.Bar(
+        x=nes, y=names, orientation="h",
+        marker_color=colors,
+        text=[f"{v:+.2f}" for v in nes], textposition="outside",
+    ))
+    fig.update_layout(
+        title=f"GSEA — MSigDB Hallmark — {sample_id}",
+        xaxis_title="Normalized Enrichment Score (NES)",
+        yaxis=dict(autorange="reversed"),
+        height=max(350, len(names) * 35 + 80),
+        margin=dict(l=10, r=60, t=50, b=40),
+    )
+    return fig
+
+
+def _plotly_wes_variants(sample_id: str, mutation: dict[str, Any]):
+    if not _PLOTLY:
+        return None
+    n_snvs = mutation.get("n_snvs_raw", 0)
+    n_indels = mutation.get("n_indels_raw", 0)
+    n_pass = mutation.get("n_pass_variants", 0)
+    variants = mutation.get("notable_oc_driver_variants", [])
+
+    fig = _plotly_subplots(rows=1, cols=2, subplot_titles=["Variant Counts", "Driver VAFs"])
+    cats = ["SNVs (raw)", "Indels (raw)", "PASS variants"]
+    vals = [n_snvs, n_indels, n_pass]
+    fig.add_trace(go.Bar(
+        x=cats, y=vals, marker_color=["#3498db", "#9b59b6", "#2ecc71"],
+        text=vals, textposition="outside", showlegend=False,
+    ), row=1, col=1)
+    if variants:
+        csq_colors = {
+            "missense_variant": "#e67e22", "frameshift_variant": "#e74c3c",
+            "stop_gained": "#c0392b", "splice_donor_variant": "#8e44ad",
+        }
+        genes = [v["gene"] for v in variants]
+        vafs = [v["vaf"] for v in variants]
+        bar_colors = [csq_colors.get(v.get("consequence", ""), "#7f8c8d") for v in variants]
+        fig.add_trace(go.Bar(
+            x=vafs, y=genes, orientation="h",
+            marker_color=bar_colors,
+            text=[f"{v:.2f}" for v in vafs], textposition="outside",
+            showlegend=False,
+        ), row=1, col=2)
+    fig.update_layout(title=f"WES Variant Summary — {sample_id}", height=480)
+    return fig
+
+
 # ── entry point ───────────────────────────────────────────────────────────────
 
 _FIGURE_CAPTIONS = {
@@ -246,10 +406,13 @@ def generate_figures_for_run(
     run_id: str,
     checkpoint: dict[str, Any],
     report_dir: Path,
-) -> dict[str, list[str]]:
+) -> dict[str, list[dict[str, str]]]:
     """Generate all figures for every sample in the checkpoint.
 
-    Returns a dict mapping sample_id → list of PNG file paths.
+    Returns a dict mapping sample_id → list of figure dicts, each with keys:
+      - "png": absolute path to the saved PNG file
+      - "html_div": Plotly interactive div HTML string (empty string if unavailable)
+      - "caption": human-readable figure title
     """
     figures_dir = report_dir / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -265,39 +428,51 @@ def generate_figures_for_run(
             continue
         samples.setdefault(sid, {})[record["step"]] = outputs
 
-    result: dict[str, list[str]] = {}
+    def _entry(png_fn, plotly_fn, *args) -> dict[str, str] | None:
+        png = png_fn(*args, figures_dir)
+        if not png:
+            return None
+        plotly_fig = plotly_fn(*args) if _PLOTLY else None
+        return {
+            "png": png,
+            "html_div": _div(plotly_fig) if plotly_fig is not None else "",
+            "caption": _caption(png),
+        }
+
+    result: dict[str, list[dict[str, str]]] = {}
     for sid, steps in samples.items():
-        paths: list[str] = []
+        entries: list[dict[str, str]] = []
 
         if "cell_annotation" in steps:
-            p = plot_cell_type_composition(sid, steps["cell_annotation"], figures_dir)
-            if p:
-                paths.append(p)
+            e = _entry(plot_cell_type_composition, _plotly_cell_type_composition,
+                       sid, steps["cell_annotation"])
+            if e:
+                entries.append(e)
 
         if "clustering" in steps:
-            p = plot_mock_umap(sid, steps["clustering"], figures_dir)
-            if p:
-                paths.append(p)
-            p = plot_cluster_sizes(sid, steps["clustering"], figures_dir)
-            if p:
-                paths.append(p)
+            e = _entry(plot_mock_umap, _plotly_umap, sid, steps["clustering"])
+            if e:
+                entries.append(e)
+            e = _entry(plot_cluster_sizes, _plotly_cluster_sizes, sid, steps["clustering"])
+            if e:
+                entries.append(e)
 
         if "differential_expression" in steps:
-            p = plot_de_genes(sid, steps["differential_expression"], figures_dir)
-            if p:
-                paths.append(p)
+            e = _entry(plot_de_genes, _plotly_de_genes, sid, steps["differential_expression"])
+            if e:
+                entries.append(e)
 
         if "gsea" in steps:
-            p = plot_gsea(sid, steps["gsea"], figures_dir)
-            if p:
-                paths.append(p)
+            e = _entry(plot_gsea, _plotly_gsea, sid, steps["gsea"])
+            if e:
+                entries.append(e)
 
         if "mutation_calling" in steps:
-            p = plot_wes_variants(sid, steps["mutation_calling"], figures_dir)
-            if p:
-                paths.append(p)
+            e = _entry(plot_wes_variants, _plotly_wes_variants, sid, steps["mutation_calling"])
+            if e:
+                entries.append(e)
 
-        if paths:
-            result[sid] = paths
+        if entries:
+            result[sid] = entries
 
     return result

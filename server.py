@@ -226,7 +226,13 @@ class Handler(BaseHTTPRequestHandler):
         fpath = STATIC_DIR / name
         if not fpath.exists():
             return self._send_json({"error": f"missing static file: {name}"}, 404)
-        return self._serve_bytes(fpath.read_bytes(), content_type)
+        body = fpath.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
 
 def main() -> None:

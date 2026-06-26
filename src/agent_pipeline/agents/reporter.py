@@ -134,21 +134,30 @@ def _caption(png_path: str) -> str:
     return stem
 
 
-def _figures_html(figure_paths: dict[str, list[str]], report_dir: Path) -> str:
-    if not figure_paths:
+def _figures_html(figure_entries: dict[str, list[dict[str, str]]], report_dir: Path) -> str:
+    if not figure_entries:
         return ""
     parts = ['<section id="figures">', "<h2>Figures</h2>"]
-    for sid, paths in figure_paths.items():
-        parts.append(f'<div class="sample-figures">')
+    for sid, entries in figure_entries.items():
+        parts.append('<div class="sample-figures">')
         parts.append(f"<h3>Sample: {sid}</h3>")
         parts.append('<div class="figure-grid">')
-        for p in paths:
-            rel = Path(p).relative_to(report_dir)
-            cap = _caption(p)
-            parts.append(
-                f'<figure><img src="{rel}" alt="{cap}">'
-                f"<figcaption>{cap}</figcaption></figure>"
-            )
+        for entry in entries:
+            cap = entry.get("caption", "")
+            html_div = entry.get("html_div", "")
+            png = entry.get("png", "")
+            if html_div:
+                parts.append(
+                    f'<figure class="interactive">'
+                    f'{html_div}'
+                    f"<figcaption>{cap}</figcaption></figure>"
+                )
+            elif png:
+                rel = Path(png).relative_to(report_dir)
+                parts.append(
+                    f'<figure><img src="{rel}" alt="{cap}">'
+                    f"<figcaption>{cap}</figcaption></figure>"
+                )
         parts.append("</div></div>")
     parts.append("</section>")
     return "\n".join(parts)
@@ -161,6 +170,7 @@ _HTML_TEMPLATE = """\
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pipeline Report — {run_id}</title>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <style>
   :root {{
     --bg: #ffffff; --text: #1a1a2e; --muted: #555; --border: #dde;
@@ -202,6 +212,8 @@ _HTML_TEMPLATE = """\
   figure {{ margin: 0; flex: 1 1 380px; }}
   figure img {{ max-width: 100%; border: 1px solid var(--border);
                 border-radius: 6px; display: block; }}
+  figure.interactive {{ flex: 1 1 560px; border: 1px solid var(--border);
+                        border-radius: 6px; overflow: hidden; padding: 4px; }}
   figcaption {{ font-size: 12px; color: var(--muted); margin-top: 6px;
                 text-align: center; }}
   .sample-figures {{ margin-bottom: 2em; }}
@@ -336,6 +348,7 @@ def run(
             "event": "figures_generated",
             "n_samples": len(figure_paths),
             "n_figures": sum(len(v) for v in figure_paths.values()),
+            "interactive": fig_module._PLOTLY,
         })
     except Exception as exc:  # noqa: BLE001
         state.append_log(run_id, {"event": "figures_error", "error": str(exc)})

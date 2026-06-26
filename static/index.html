@@ -144,10 +144,10 @@
       <input type="text" id="dataPath" placeholder="data/WES_OC_fasta or data/scRNA_AML">
       <div class="hint">Relative to the repo root, or an absolute path. The agent inspects file content itself — it doesn't trust this label. Leave blank with an existing Run ID to resume from checkpoint.</div>
       <div id="demoHint" class="hint" style="margin-top:8px; display:none; color:var(--warn);">
-        No data yet? Run <code>python download_demo_data.py</code> to fetch a free public PBMC 3k scRNA-seq dataset (~7 MB).
+        No data yet? Ensure <code>data/demo_multimodal/</code> exists with demo data.
       </div>
       <button type="button" id="demoBtn" style="margin-top:8px;width:100%;background:var(--panel2);color:var(--scrna);border:1px solid var(--border);font-size:12px;padding:6px 10px;">
-        Use demo data &nbsp;(data/demo/pbmc3k.h5ad)
+        Use demo data &nbsp;(data/demo_multimodal/)
       </button>
     </fieldset>
 
@@ -203,11 +203,14 @@ let pollInterval = 1000;
 let emptyPollStreak = 0;
 let lastStatus = 'idle';
 
-const DEMO_PATH = 'data/demo/pbmc3k.h5ad';
+const DEMO_PATH = 'data/demo_multimodal';
 
 el('demoBtn').addEventListener('click', async () => {
-  el('dataPath').value = DEMO_PATH;
-  // ask the server if the file exists yet
+  const inp = el('dataPath');
+  inp.value = DEMO_PATH;
+  inp.focus();
+  inp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // ask the server if the directory exists yet
   try {
     const res = await fetch('/api/file_exists?path=' + encodeURIComponent(DEMO_PATH));
     const data = await res.json();
