@@ -167,13 +167,16 @@ it does and what output it produces:
 ### Expected outputs
 - `result/<run_id>/state.json` — checkpoint with all step results
 - `result/<run_id>/report/report.md` — narrative report
-- `result/<run_id>/report/report.html` — HTML report with sidebar TOC
-- `result/<run_id>/report/figures/` — PNG figures:
+- `result/<run_id>/report/report.html` — HTML report with sidebar TOC and \
+interactive Plotly figures (zoom, hover, pan)
+- `result/<run_id>/report/figures/` — figures per sample (PNG + interactive):
   - Cell-type composition bar chart
   - UMAP coloured by cluster / cell type
   - Cluster size distribution
-  - Top DE genes dot plot
+  - Top DE genes bar chart
+  - Volcano plot (−log₁₀ adj-p vs log₂FC, coloured by direction)
   - GSEA enrichment bar chart
+  - WES: variant counts + driver gene VAF chart (WES branch only)
 
 ### Known limitations for this run
 List any steps or analyses that are NOT available for the chosen scenario

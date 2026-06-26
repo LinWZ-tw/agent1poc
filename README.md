@@ -50,38 +50,6 @@ groups → GSEA) and WES workers (GATK germline, mock mode) for all four samples
 then synthesizes an integrated HTML report. A green **"Open report"** button
 appears in the sidebar when done.
 
-### Option C — MCP server (Claude Code / Claude Desktop)
-
-Install the pipeline as an MCP tool so it appears natively inside any
-MCP-compatible LLM client:
-
-```bash
-# 1. Install (editable so result/ stays in the repo)
-pip install -e .
-
-# 2. Add to ~/.claude/settings.json
-{
-  "mcpServers": {
-    "bioinformatics": {
-      "command": "agent-pipeline-mcp"
-    }
-  }
-}
-
-# 3. Install the companion slash command
-cp claude-skill/bioinformatics.md ~/.claude/commands/bioinformatics.md
-```
-
-Restart Claude Code, then type `/bioinformatics` and follow the prompts. The
-MCP server exposes four tools directly:
-
-| Tool | Description |
-|------|-------------|
-| `run_pipeline` | Start an analysis — returns `run_id` immediately |
-| `get_pipeline_status` | Poll events + current status |
-| `get_pipeline_results` | Fetch the final Markdown report |
-| `list_pipeline_runs` | Show all runs in `result/` |
-
 ### Option B — CLI (no browser needed)
 
 ```bash
@@ -138,6 +106,44 @@ The full transcript (every turn, tool call, and result) is saved to
 `result/<run_id>/agent_log.jsonl` regardless of how you interact.
 
 **Single-sample scRNA demo** (no pertpy needed, ~7 MB):
+
+### Option C — MCP server (Claude Code / Claude Desktop)
+
+Install the pipeline as a native MCP tool so it appears inside any
+MCP-compatible LLM client without running a separate web server:
+
+```bash
+# 1. Install (editable so result/ stays in the repo)
+pip install -e .
+
+# 2. Add to ~/.claude/settings.json
+{
+  "mcpServers": {
+    "bioinformatics": {
+      "command": "agent-pipeline-mcp"
+    }
+  }
+}
+
+# 3. Install the companion slash command
+cp claude-skill/bioinformatics.md ~/.claude/commands/bioinformatics.md
+```
+
+Restart Claude Code, then type `/bioinformatics` and follow the prompts.
+The MCP server exposes four tools:
+
+| Tool | Description |
+|------|-------------|
+| `run_pipeline` | Start an analysis — returns `run_id` immediately (non-blocking) |
+| `get_pipeline_status` | Poll events + current status; pass `since` index to get only new events |
+| `get_pipeline_results` | Fetch the final Markdown report + HTML path once done |
+| `list_pipeline_runs` | Show all past runs in `result/` with step counts and report status |
+
+The `/bioinformatics` skill automates the full polling loop for you — collect
+inputs → `run_pipeline` → poll `get_pipeline_status` → `get_pipeline_results`
+→ render report inline.
+
+
 
 ```bash
 python download_demo_data.py --demo scrna
@@ -229,12 +235,17 @@ then sets the appropriate analysis parameters for each worker.
 ### File layout
 
 ```
-requirements.txt         pip dependencies (anthropic, openai, matplotlib, scanpy, anndata, h5py)
+pyproject.toml           package definition; entry points: agent-pipeline-mcp,
+                         agent-pipeline-gui, agent-pipeline
+requirements.txt         pip dependencies (anthropic, openai, mcp, matplotlib, scanpy, anndata, h5py)
 download_demo_data.py    downloads demo datasets: Kang 2018 multimodal (default) or PBMC 3k scRNA
 run_pipeline.py          CLI entrypoint: goal → planner agent, runs to completion
 server.py                web server: GUI ↔ planner agent session
 static/index.html        browser GUI (provider picker, API key, data path, chat panel)
 test_dispatch.py         no-LLM step-library test harness; optionally calls Reporter with --api-key
+claude-skill/
+  bioinformatics.md      /bioinformatics Claude Code slash command — orchestrates the
+                         four MCP tools into a guided analysis workflow
 src/agent_pipeline/
   agents/
     planner.py           Layer 1: scenario detection, plan creation, worker dispatch
@@ -242,13 +253,17 @@ src/agent_pipeline/
     scrna_agent.py       Layer 2: scRNA pipeline execution agent
     reporter.py          Layer 3: result synthesis, report & figure generation
   prompts/
-    planner.py           system prompt for the planner (scenario routing, dispatch patterns)
+    planner.py           system prompt for the planner (scenario routing, scope guard,
+                         dispatch patterns)
     wes.py               system prompt for the WES worker (germline / somatic / multimodal)
     scrna.py             system prompt for the scRNA worker (within_sample / multi_group / trajectory / tme)
     reporter.py          system prompt for the reporter
-  figures.py             matplotlib figure generation from checkpoint data (no display
-                         required); 6 plot types per branch: cell-type composition, mock
-                         UMAP, cluster sizes, DE genes, GSEA, WES variant summary
+  mcp_server.py          FastMCP stdio server; 4 tools: run_pipeline, get_pipeline_status,
+                         get_pipeline_results, list_pipeline_runs
+  figures.py             figure generation from checkpoint data; each figure produced as
+                         both a static PNG and an interactive Plotly HTML div; 7 plot
+                         types: cell-type composition, UMAP, cluster sizes, DE genes bar
+                         chart, volcano plot, GSEA, WES variant summary
   providers.py           LLM provider abstraction: AnthropicProvider, OpenAIProvider,
                          make_provider(); Gemini and Grok route through OpenAIProvider
                          with fixed base URLs; model fallback on 503/429/529
@@ -265,7 +280,7 @@ src/agent_pipeline/
     mutation.py          GATK4 germline calling (WES)
     annotation.py        marker-score cell typing (scRNA)
     clustering.py        Harmony + Leiden (scRNA)
-    diffexp.py           rank_genes_groups (scRNA)
+    diffexp.py           rank_genes_groups (scRNA); outputs volcano_data for volcano plot
     gsea.py              gseapy prerank (scRNA)
 ```
 
@@ -379,7 +394,9 @@ pip install -r requirements.txt
 |---|---|
 | `anthropic>=0.111` | Claude provider (Planner, Worker, Reporter agents) |
 | `openai>=1.0` | Gemini, Grok, and OpenAI-compatible providers |
-| `matplotlib>=3.7` | `figures.py` — PNG plots for the HTML report (Agg backend, no display needed) |
+| `mcp>=1.0` | MCP server (`agent-pipeline-mcp` entry point) |
+| `matplotlib>=3.7` | `figures.py` — static PNG figures (Agg backend, no display needed) |
+| `plotly>=5.0` | `figures.py` — interactive HTML figures embedded in `report.html` |
 | `scanpy>=1.9` | scRNA steps and demo data download |
 | `anndata>=0.9` | scRNA `.h5ad` file I/O |
 | `h5py>=3.8` | CellRanger `.h5` matrix reading |
@@ -612,12 +629,20 @@ cat result/<run-id>/state.json | python -m json.tool
 All runs write to `result/<run_id>/`:
 
 ```
-state.json                     ordered checkpoint (status, inputs, outputs per step)
-agent_log.jsonl                full turn-by-turn transcript for audit/debugging
-report/report.md               narrative Markdown report (Executive Summary, metrics, Next Steps)
-report/report.html             HTML with sticky sidebar TOC + figures gallery
-report/figures/<id>_*.png      matplotlib PNGs (one set per sample, both branches)
+state.json                       ordered checkpoint (status, inputs, outputs per step)
+agent_log.jsonl                  full turn-by-turn transcript for audit/debugging
+report/report.md                 narrative Markdown report (Executive Summary, metrics, Next Steps)
+report/report.html               HTML with sticky sidebar TOC + interactive Plotly figures
+report/figures/<id>_*.png        static PNGs per sample — scRNA: cell-type composition,
+                                   UMAP, cluster sizes, DE genes bar chart, volcano plot,
+                                   GSEA; WES: variant counts + driver VAF chart
+reproduce.sh                     shell script to reproduce all steps
+Snakefile                        Snakemake workflow for the run
+methods.md                       methods section text for papers
 ```
+
+The HTML report embeds interactive Plotly charts (zoom, hover, pan) alongside
+the narrative; the PNGs are also written to `figures/` for standalone use.
 
 ## Switching a step to real mode
 
