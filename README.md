@@ -10,7 +10,7 @@ and any OpenAI-compatible endpoint (OpenAI, Ollama, vLLM, Groq, etc.).
 ## Quick start (first-time user)
 
 ```bash
-# 0. clone repo
+# 0. Clone the repository
 git clone https://github.com/LinWZ-tw/agent1poc/
 
 # 1. Install dependencies
