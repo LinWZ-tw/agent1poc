@@ -151,6 +151,49 @@ def plot_de_genes(sample_id: str, diffexp: dict[str, Any], figures_dir: Path) ->
     return _save(fig, figures_dir / f"de_genes_{sample_id}.png")
 
 
+def plot_volcano(sample_id: str, diffexp: dict[str, Any], figures_dir: Path) -> str:
+    """Volcano plot: -log10(padj) vs log2FC coloured by significance direction."""
+    volcano_data = diffexp.get("volcano_data", [])
+    if not volcano_data:
+        return ""
+
+    genes = [d["gene"] for d in volcano_data]
+    lfc = np.array([d["logfoldchange"] for d in volcano_data], dtype=float)
+    padj = np.clip([d["pval_adj"] for d in volcano_data], 1e-300, 1.0)
+    neg_log_p = -np.log10(padj)
+
+    sig_up = (padj < 0.05) & (lfc > 1)
+    sig_dn = (padj < 0.05) & (lfc < -1)
+    ns = ~sig_up & ~sig_dn
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    ax.scatter(lfc[ns], neg_log_p[ns], c="#aaaaaa", s=12, alpha=0.45, linewidths=0)
+    ax.scatter(lfc[sig_up], neg_log_p[sig_up], c="#e74c3c", s=18, alpha=0.85,
+               linewidths=0, label=f"Up  (n={sig_up.sum()})")
+    ax.scatter(lfc[sig_dn], neg_log_p[sig_dn], c="#3498db", s=18, alpha=0.85,
+               linewidths=0, label=f"Down  (n={sig_dn.sum()})")
+
+    ax.axhline(-np.log10(0.05), color="black", linewidth=0.7, linestyle="--", alpha=0.5)
+    ax.axvline(1, color="black", linewidth=0.7, linestyle="--", alpha=0.5)
+    ax.axvline(-1, color="black", linewidth=0.7, linestyle="--", alpha=0.5)
+
+    # Label top hits by combined score
+    sig_idx = np.where(sig_up | sig_dn)[0]
+    if len(sig_idx):
+        scores = neg_log_p[sig_idx] + np.abs(lfc[sig_idx])
+        for i in sig_idx[np.argsort(scores)[-8:]]:
+            ax.annotate(genes[i], (lfc[i], neg_log_p[i]),
+                        fontsize=7, xytext=(3, 3), textcoords="offset points")
+
+    group = diffexp.get("volcano_group", "")
+    ax.set_xlabel("Log$_2$ Fold Change", fontsize=11)
+    ax.set_ylabel("-log$_{10}$(adj. p-value)", fontsize=11)
+    ax.set_title(f"Volcano Plot — {group}\n{sample_id}")
+    ax.legend(fontsize=8, loc="upper left")
+    fig.tight_layout()
+    return _save(fig, figures_dir / f"volcano_{sample_id}.png")
+
+
 def plot_gsea(sample_id: str, gsea_result: dict[str, Any], figures_dir: Path) -> str:
     """Horizontal bar chart of NES values for top enriched pathways."""
     pathways = gsea_result.get("enriched_pathways", [])
@@ -325,6 +368,53 @@ def _plotly_de_genes(sample_id: str, diffexp: dict[str, Any]):
     return fig
 
 
+def _plotly_volcano(sample_id: str, diffexp: dict[str, Any]):
+    volcano_data = diffexp.get("volcano_data", [])
+    if not volcano_data or not _PLOTLY:
+        return None
+
+    import math
+    genes = [d["gene"] for d in volcano_data]
+    lfc = [float(d["logfoldchange"]) for d in volcano_data]
+    padj = [max(float(d["pval_adj"]), 1e-300) for d in volcano_data]
+    neg_log_p = [-math.log10(p) for p in padj]
+
+    categories = [
+        "Up" if p < 0.05 and l > 1 else "Down" if p < 0.05 and l < -1 else "NS"
+        for l, p in zip(lfc, padj)
+    ]
+    color_map = {"Up": "#e74c3c", "Down": "#3498db", "NS": "#aaaaaa"}
+    size_map = {"Up": 7, "Down": 7, "NS": 4}
+
+    traces = []
+    for cat, color in color_map.items():
+        idx = [i for i, c in enumerate(categories) if c == cat]
+        if not idx:
+            continue
+        traces.append(go.Scatter(
+            x=[lfc[i] for i in idx],
+            y=[neg_log_p[i] for i in idx],
+            mode="markers",
+            marker=dict(color=color, size=size_map[cat], opacity=0.75),
+            name=f"{cat} (n={len(idx)})",
+            text=[genes[i] for i in idx],
+            hovertemplate="%{text}<br>LFC: %{x:.3f}<br>-log10(padj): %{y:.2f}<extra></extra>",
+        ))
+
+    group = diffexp.get("volcano_group", "")
+    fig = go.Figure(traces)
+    fig.add_hline(y=-math.log10(0.05), line_dash="dash", line_color="gray", line_width=1)
+    fig.add_vline(x=1, line_dash="dash", line_color="gray", line_width=1)
+    fig.add_vline(x=-1, line_dash="dash", line_color="gray", line_width=1)
+    fig.update_layout(
+        title=f"Volcano Plot — {group} — {sample_id}",
+        xaxis_title="Log2 Fold Change",
+        yaxis_title="-log10(adj. p-value)",
+        height=520,
+    )
+    return fig
+
+
 def _plotly_gsea(sample_id: str, gsea_result: dict[str, Any]):
     pathways = gsea_result.get("enriched_pathways", [])
     if not pathways or not _PLOTLY:
@@ -389,6 +479,7 @@ _FIGURE_CAPTIONS = {
     "umap_clusters": "UMAP — Leiden Clusters (mock)",
     "cluster_sizes": "Cluster Sizes (Leiden)",
     "de_genes": "Top Differential Expression Genes",
+    "volcano": "Volcano Plot",
     "gsea": "GSEA — Enriched Pathways",
     "wes_variants": "WES Variant Summary",
 }
@@ -459,6 +550,9 @@ def generate_figures_for_run(
 
         if "differential_expression" in steps:
             e = _entry(plot_de_genes, _plotly_de_genes, sid, steps["differential_expression"])
+            if e:
+                entries.append(e)
+            e = _entry(plot_volcano, _plotly_volcano, sid, steps["differential_expression"])
             if e:
                 entries.append(e)
 
