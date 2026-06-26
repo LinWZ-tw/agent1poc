@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bioinformatics-pipeline"
+version = "0.1.0"
+description = "Claude-orchestrated bioinformatics pipeline agent — WES and scRNA-seq analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.111.0",
+    "openai>=1.0.0",
+    "matplotlib>=3.7.0",
+    "mcp>=1.0.0",
+]
+
+[project.optional-dependencies]
+scrna = [
+    "scanpy>=1.9.0",
+    "anndata>=0.9.0",
+    "h5py>=3.8.0",
+]
+interactive = [
+    "plotly>=5.0.0",
+]
+all = [
+    "bioinformatics-pipeline[scrna,interactive]",
+]
+
+[project.scripts]
+agent-pipeline-mcp = "agent_pipeline.mcp_server:main"
+agent-pipeline-gui  = "server:main"
+agent-pipeline      = "run_pipeline:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"agent_pipeline" = ["prompts/*.py"]

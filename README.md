@@ -50,6 +50,38 @@ groups → GSEA) and WES workers (GATK germline, mock mode) for all four samples
 then synthesizes an integrated HTML report. A green **"Open report"** button
 appears in the sidebar when done.
 
+### Option C — MCP server (Claude Code / Claude Desktop)
+
+Install the pipeline as an MCP tool so it appears natively inside any
+MCP-compatible LLM client:
+
+```bash
+# 1. Install (editable so result/ stays in the repo)
+pip install -e .
+
+# 2. Add to ~/.claude/settings.json
+{
+  "mcpServers": {
+    "bioinformatics": {
+      "command": "agent-pipeline-mcp"
+    }
+  }
+}
+
+# 3. Install the companion slash command
+cp claude-skill/bioinformatics.md ~/.claude/commands/bioinformatics.md
+```
+
+Restart Claude Code, then type `/bioinformatics` and follow the prompts. The
+MCP server exposes four tools directly:
+
+| Tool | Description |
+|------|-------------|
+| `run_pipeline` | Start an analysis — returns `run_id` immediately |
+| `get_pipeline_status` | Poll events + current status |
+| `get_pipeline_results` | Fetch the final Markdown report |
+| `list_pipeline_runs` | Show all runs in `result/` |
+
 ### Option B — CLI (no browser needed)
 
 ```bash

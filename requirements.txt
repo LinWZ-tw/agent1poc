@@ -2,6 +2,9 @@
 anthropic>=0.111.0
 openai>=1.0.0
 
+# MCP server (exposes pipeline as tools for Claude Code / Claude Desktop)
+mcp>=1.0.0
+
 # Report figures (no display needed — uses Agg backend)
 matplotlib>=3.7.0
 
